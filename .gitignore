@@ -1,7 +1,27 @@
+# Segredos
 .env
+!.env.example
+
+# Cache Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Ambiente virtual
 .venv/
+
+# Build
 *.egg-info/
 dist/
+build/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
