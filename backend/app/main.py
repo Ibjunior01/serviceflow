@@ -1,19 +1,15 @@
 from fastapi import FastAPI
-from app.core.config import settings
-
+from app.api.v1.endpoints.auth import router as auth_router
+ 
 app = FastAPI(
-    title=settings.APP_NAME,
-    version="0.1.0",
-    docs_url="/docs" if settings.APP_ENV == "development" else None,
+    title="ServiceFlow API",
+    description="Field Service Management para técnicos de refrigeração e ar-condicionado.",
+    version="1.0.0",
 )
-
-
-@app.get("/health", tags=["health"])
-async def health_check():
-    
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME,
-        "env": settings.APP_ENV,
-        "version": settings.APP_VERSION,
-    }
+ 
+# Routers
+app.include_router(auth_router, prefix="/api/v1")
+ 
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "ok"}
