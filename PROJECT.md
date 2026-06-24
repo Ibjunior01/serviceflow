@@ -1,7 +1,7 @@
 # ServiceFlow — Project Continuity Document
 
 ## Sessão Atual
-**Fase:** 1E — CRUD Base + Service Layer
+**Fase:** 1F — Endpoints REST /api/v1
 **Status:** Aguardando
 
 ## Progresso das Fases
@@ -12,8 +12,8 @@
 | 1B | Models SQLAlchemy 2.0 + Alembic | ✅ Concluída |
 | 1C | Schemas Pydantic v2 | ✅ Concluída |
 | 1D | Auth JWT (login, refresh, dependency) | ✅ Concluída |
-| 1E | CRUD Base + Service Layer | ⏳ Próxima |
-| 1F | Endpoints REST /api/v1 | ⏳ Pendente |
+| 1E | CRUD Base + Service Layer | ✅ Concluída |
+| 1F | Endpoints REST /api/v1 | ⏳ Próxima |
 
 ## Decisões de Arquitetura Tomadas
 - Async engine (asyncpg) para performance sob carga
@@ -44,6 +44,20 @@
 - Refresh token sem blacklist no MVP (decisão pendente para produção)
 - `get_db` é o nome da função de sessão em `app/db/session.py` (não `get_session`)
 - Todos os comandos devem ser executados de dentro de `backend/` (não da raiz do projeto)
+- Repository Pattern: `repository` cuida dos queries, `service` cuida da lógica de negócio — services não tocam na session diretamente
+- `CRUDBase` genérico com `get`, `get_by`, `list`, `create`, `update`, `delete`, `exists`
+- `list()` no CRUDBase retorna `tuple[list[ModelType], int]` (dados + total para paginação)
+- Repositórios instanciados como singletons no módulo (ex: `company_repo = CompanyRepository(Company)`)
+- Services instanciados como singletons no módulo (ex: `company_service = CompanyService()`)
+- Exceções de domínio em `app/core/exceptions.py`: `NotFoundError`, `ConflictError`, `ForbiddenError`, `BusinessRuleError`, `UnauthorizedError`
+- Exception handlers registrados no `main.py` mapeando exceções de domínio → HTTP status codes
+- Máquina de estados da OS definida em `VALID_TRANSITIONS` dict no `service_order_service.py`
+- Timestamps automáticos na mudança de status: `started_at` (→ IN_PROGRESS), `completed_at` (→ COMPLETED/CANCELLED)
+- `get_next_order_number()` baseado em COUNT por company (sequencial por tenant)
+- Técnico só pode editar OS atribuída a ele (guard no `service_order_service.update`)
+- OS finalizada (COMPLETED/INVOICED/CANCELLED) não pode ser editada
+- Apenas DRAFT pode ser excluída
+- Apenas OWNER pode alterar roles de usuários
 
 ## Stack Técnica
 - **Backend:** FastAPI + Python 3.14
@@ -72,7 +86,8 @@ serviceflow/
     │   ├── core/
     │   │   ├── config.py           ✅ pydantic-settings
     │   │   ├── security.py         ✅ JWT + bcrypt
-    │   │   └── dependencies.py     ✅ get_current_user + RBAC guards
+    │   │   ├── dependencies.py     ✅ get_current_user + RBAC guards
+    │   │   └── exceptions.py       ✅ NotFoundError, ConflictError, ForbiddenError, BusinessRuleError, UnauthorizedError
     │   ├── db/
     │   │   ├── session.py          ✅ get_db (não get_session)
     │   │   └── base.py
@@ -84,6 +99,13 @@ serviceflow/
     │   │   ├── customer.py         ← cliente do tenant
     │   │   ├── service_order.py    ← OS + ServiceItem + enums
     │   │   └── subscription.py     ← controle de plano SaaS
+    │   ├── repositories/           ✅ COMPLETO
+    │   │   ├── __init__.py         ← exporta todos os singletons
+    │   │   ├── base.py             ← CRUDBase genérico
+    │   │   ├── company.py          ← get_by_slug, get_by_document
+    │   │   ├── user.py             ← get_by_email, list_by_company
+    │   │   ├── customer.py         ← list_by_company, get_by_company_and_id
+    │   │   └── service_order.py    ← list_by_company (filtros), get_with_items, get_next_order_number
     │   ├── schemas/                ✅ COMPLETO
     │   │   ├── __init__.py
     │   │   ├── common.py           ← BaseSchema, PaginatedResponse, MessageResponse
@@ -93,9 +115,13 @@ serviceflow/
     │   │   ├── service_item.py
     │   │   ├── service_order.py
     │   │   └── subscription.py
-    │   ├── services/               ✅ auth concluído
-    │   │   └── auth_service.py     ← register, login, refresh_tokens
-    │   └── main.py
+    │   ├── services/               ✅ COMPLETO
+    │   │   ├── auth_service.py     ← register, login, refresh_tokens
+    │   │   ├── company_service.py  ← get_or_404, update
+    │   │   ├── user_service.py     ← CRUD + guard de role + hash de senha
+    │   │   ├── customer_service.py ← CRUD completo com isolamento por tenant
+    │   │   └── service_order_service.py ← CRUD + máquina de estados
+    │   └── main.py                 ✅ exception handlers registrados
     ├── alembic/                    ✅ CONFIGURADO
     │   ├── env.py                  ← async, importa Base + settings
     │   ├── script.py.mako
@@ -137,8 +163,26 @@ serviceflow/
 - `ItemType`: LABOR / PART / TRAVEL / OTHER
 - `SubscriptionStatus`: TRIALING / ACTIVE / PAST_DUE / CANCELLED / EXPIRED
 
-## Endpoints Implementados (Fase 1D)
+## Transições de Status da OS (Fase 1E)
 
+```
+DRAFT → SCHEDULED → IN_PROGRESS → COMPLETED → INVOICED
+  ↓          ↓            ↓
+CANCELLED  CANCELLED   CANCELLED
+```
+
+| De | Para | Permitido |
+|----|------|-----------|
+| DRAFT | SCHEDULED, CANCELLED | ✅ |
+| SCHEDULED | IN_PROGRESS, CANCELLED | ✅ |
+| IN_PROGRESS | COMPLETED, CANCELLED | ✅ |
+| COMPLETED | INVOICED | ✅ |
+| INVOICED | — | ❌ terminal |
+| CANCELLED | — | ❌ terminal |
+
+## Endpoints Implementados
+
+### Auth (Fase 1D)
 | Método | Rota | Descrição | Auth |
 |--------|------|-----------|------|
 | POST | `/api/v1/auth/register` | Cria empresa + owner + subscription trial | Público |
@@ -212,4 +256,4 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 - [ ] Avaliar soft delete (`deleted_at`) vs `is_active` para auditoria
 - [ ] Avaliar `RefreshToken` model separado para revogar tokens individuais (blacklist)
 - [ ] Avaliar `Checklist/ChecklistItem` model (checklist de campo — fase 2)
-- [ ] Definir estratégia de geração do `order_number` (ex: OS-2025-00042)
+- [ ] Definir estratégia de geração do `order_number` (ex: OS-2025-00042) — atual: COUNT+1 por tenant (simples, sem gaps garantidos)
