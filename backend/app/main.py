@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.v1.endpoints.auth import router as auth_router
+from app.api.v1.router import api_router
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from app.core.exceptions import (
@@ -34,7 +34,7 @@ async def unauthorized_handler(request: Request, exc: UnauthorizedError):
     return JSONResponse(status_code=401, content={"detail": exc.message})
  
 # Routers
-app.include_router(auth_router, prefix="/api/v1")
+app.include_router(api_router, prefix="/api/v1")
  
 @app.get("/health", tags=["Health"])
 async def health():

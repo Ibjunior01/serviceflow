@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.service_order import ServiceOrder, ServiceItem, OrderStatus
+from app.schemas.service_order import ServiceOrderCreate, ServiceOrderUpdate, ServiceOrderStatusUpdate
+from app.schemas.service_item import ServiceItemCreate
 
-from app.models.service_order import ServiceOrder, OrderStatus
+
 from app.models.user import User, UserRole
 from app.repositories.service_order import service_order_repo
 from app.repositories.customer import customer_repo
-from app.schemas.service_order import ServiceOrderCreate, ServiceOrderUpdate, ServiceOrderStatusUpdate
 from app.core.exceptions import NotFoundError, ForbiddenError, BusinessRuleError
 
 # Transições válidas de status
@@ -60,7 +62,6 @@ class ServiceOrderService:
         data: ServiceOrderCreate,
         created_by: User,
     ) -> ServiceOrder:
-        # Valida cliente pertence ao tenant
         customer = await customer_repo.get_by_company_and_id(
             db, company_id, data.customer_id
         )
@@ -74,18 +75,19 @@ class ServiceOrderService:
             obj_in={
                 "company_id": company_id,
                 "customer_id": data.customer_id,
-                "technician_id": data.technician_id,
+                "technician_id": data.assigned_to,
                 "title": data.title,
                 "description": data.description,
-                "priority": data.priority.value if data.priority else OrderPriority.NORMAL.value,
-                "status": OrderStatus.DRAFT.value,
+                "priority": data.priority if data.priority else "normal",
+                "status": "draft",
                 "scheduled_at": data.scheduled_at,
-                "order_number": order_number,
-                "created_by_id": created_by.id,
+                "order_number": str(order_number),
+                "service_address": data.location_address,
+                "internal_notes": data.notes,
             },
         )
         return order
-
+    
     async def update(
         self,
         db: AsyncSession,
@@ -121,20 +123,21 @@ class ServiceOrderService:
         order = await self.get_or_404(db, order_id, company_id)
 
         current = OrderStatus(order.status)
-        new = data.status
+        new = data.status if isinstance(data.status, str) else data.status.value
+        new_enum = OrderStatus(new)
 
-        if new not in VALID_TRANSITIONS.get(current, []):
+        if new_enum not in VALID_TRANSITIONS.get(current, []):
             raise BusinessRuleError(
-                f"Transição inválida: {current.value} → {new.value}"
+                f"Transição inválida: {current.value} → {new}"
             )
 
-        update_data: dict = {"status": new.value}
+        update_data: dict = {"status": new}
 
         # Timestamps automáticos
         now = datetime.now(timezone.utc)
-        if new == OrderStatus.IN_PROGRESS:
+        if new == OrderStatus.IN_PROGRESS.value:
             update_data["started_at"] = now
-        elif new in (OrderStatus.COMPLETED, OrderStatus.CANCELLED):
+        elif new in (OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value):
             update_data["completed_at"] = now
 
         return await service_order_repo.update(db, db_obj=order, obj_in=update_data)
@@ -148,4 +151,57 @@ class ServiceOrderService:
         await service_order_repo.delete(db, db_obj=order)
 
 
-service_order_service = ServiceOrderService()
+    async def add_item(
+        self,
+        db: AsyncSession,
+        *,
+        order_id: UUID,
+        company_id: UUID,
+        data: ServiceItemCreate,
+        requesting_user: User,
+    ) -> ServiceItem:
+        order = await self.get_or_404(db, order_id, company_id)
+
+        if order.status in (
+            OrderStatus.COMPLETED.value,
+            OrderStatus.INVOICED.value,
+            OrderStatus.CANCELLED.value,
+        ):
+            raise BusinessRuleError("Não é possível adicionar itens a uma OS finalizada")
+
+        if requesting_user.role == UserRole.TECHNICIAN.value:
+            if str(order.technician_id) != str(requesting_user.id):
+                raise ForbiddenError("Técnico só pode editar suas próprias OS")
+
+        return await service_order_repo.create_item(db, order_id=order_id, data=data)
+
+    async def remove_item(
+        self,
+        db: AsyncSession,
+        *,
+        order_id: UUID,
+        item_id: UUID,
+        company_id: UUID,
+        requesting_user: User,
+    ) -> None:
+        order = await self.get_or_404(db, order_id, company_id)
+
+        if order.status in (
+            OrderStatus.COMPLETED.value,
+            OrderStatus.INVOICED.value,
+            OrderStatus.CANCELLED.value,
+        ):
+            raise BusinessRuleError("Não é possível remover itens de uma OS finalizada")
+
+        if requesting_user.role == UserRole.TECHNICIAN.value:
+            if str(order.technician_id) != str(requesting_user.id):
+                raise ForbiddenError("Técnico só pode editar suas próprias OS")
+
+        item = await service_order_repo.get_item(db, item_id=item_id, order_id=order_id)
+        if not item:
+            raise NotFoundError("Item não encontrado nesta OS")
+
+        await service_order_repo.delete_item(db, item=item)
+
+
+service_order_service = ServiceOrderService()  # ← já existia, não duplicar

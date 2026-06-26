@@ -15,10 +15,6 @@ if TYPE_CHECKING:
 
 
 class Customer(UUIDMixin, TimestampMixin, Base):
-    """
-    Pessoa física ou jurídica que solicita serviços.
-    Pertence a um único tenant (Company).
-    """
     __tablename__ = "customers"
 
     company_id: Mapped[uuid.UUID] = mapped_column(
@@ -30,11 +26,14 @@ class Customer(UUIDMixin, TimestampMixin, Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     document: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="CPF ou CNPJ")
-    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    state: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
-    zip_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="Observações internas")
+    address_street: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    address_complement: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address_neighborhood: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address_state: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    address_zip: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relacionamentos

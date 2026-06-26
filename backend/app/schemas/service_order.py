@@ -15,6 +15,9 @@ from .user import UserPublic
 from .customer import CustomerResponse
 from app.models.service_order import OrderStatus, OrderPriority
 
+from app.models.service_order import ServiceItem
+from app.schemas.service_item import ServiceItemCreate
+
 
 class ServiceOrderBase(BaseSchema):
     title: str = Field(

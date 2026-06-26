@@ -80,3 +80,7 @@ class UserResponse(UserBase):
     avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    
+
+class UserRoleUpdate(BaseSchema):
+    role: UserRole

@@ -5,8 +5,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.service_order import ServiceOrder, OrderStatus
+from app.models.service_order import ServiceOrder, ServiceItem, OrderStatus
 from app.repositories.base import CRUDBase
+from app.schemas.service_item import ServiceItemCreate
 
 
 class ServiceOrderRepository(CRUDBase[ServiceOrder]):
@@ -61,7 +62,46 @@ class ServiceOrderRepository(CRUDBase[ServiceOrder]):
             ServiceOrder.company_id == company_id
         )
         count = (await db.execute(stmt)).scalar_one()
-        return count + 1
+        return  + 1
+
+    async def create_item(
+        self,
+        db: AsyncSession,
+        *,
+        order_id: UUID,
+        data: ServiceItemCreate,
+    ) -> ServiceItem:
+        item = ServiceItem(
+            service_order_id=order_id,
+            description=data.description,
+            item_type=data.item_type if isinstance(data.item_type, str) else data.item_type.value,
+            quantity=data.quantity,
+            unit_price=data.unit_price,
+        )
+        db.add(item)
+        await db.flush()
+        await db.refresh(item)
+        return item
+
+    async def get_item(
+        self,
+        db: AsyncSession,
+        item_id: UUID,
+        order_id: UUID,
+    ) -> ServiceItem | None:
+        result = await db.execute(
+            select(ServiceItem).where(
+                ServiceItem.id == item_id,
+                ServiceItem.service_order_id == order_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_item(
+        self, db: AsyncSession, *, item: ServiceItem
+    ) -> None:
+        await db.delete(item)
+        await db.flush()
 
 
 service_order_repo = ServiceOrderRepository(ServiceOrder)
