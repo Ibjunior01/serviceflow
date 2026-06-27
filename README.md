@@ -38,6 +38,8 @@ ServiceFlow é um SaaS de gestão de ordens de serviço (OS) voltado para técni
 | Auth | python-jose + passlib + bcrypt==4.0.1 |
 | Driver async | asyncpg 0.31.0 |
 | Ambiente | Docker Compose + WSL2 + Windows |
+| Testes | pytest + pytest-asyncio + httpx |
+| Frontend (2A) | React 18 + Vite + TypeScript + Tailwind + shadcn/ui |
 
 ---
 
@@ -170,6 +172,19 @@ uvicorn app.main:app --reload
 
 # Ver logs do container da API (quando rodando via Docker)
 docker compose logs -f api
+
+# ─── Testes ──────────────────────────────────────────
+# Subir banco de testes (primeira vez)
+docker exec -it backend-db-1 psql -U serviceflow -d serviceflow_db -c "CREATE DATABASE serviceflow_test;"
+
+# Rodar todos os testes
+pytest tests/ -v
+
+# Rodar arquivo específico
+pytest tests/test_auth.py -v
+
+# Resumo sem traceback
+pytest tests/ --tb=no -q
 ```
 
 ---
@@ -227,6 +242,7 @@ openssl rand -hex 32
 | `ServiceOrderStatusUpdate` em endpoint separado | `PATCH /orders/{id}/status` — status nunca muda junto com outros campos |
 | Enums com nomes UPPERCASE | Padrão Python: `UserRole.OWNER`, valor serializado `"owner"` |
 | Slug gerado como `slugify(name)-uuid[:8]` | Unicidade garantida mesmo com nomes iguais |
+
 
 ### Tabelas no banco
 
@@ -290,15 +306,18 @@ Novos tenants iniciam com 14 dias de trial no plano Free.
 | 1B | Models SQLAlchemy 2.0 + Alembic | ✅ Concluída |
 | 1C | Schemas Pydantic v2 | ✅ Concluída |
 | 1D | Auth JWT (login, refresh, dependency) | ✅ Concluída |
-| 1E | CRUD Base + Service Layer | ⏳ Próxima |
-| 1F | Endpoints REST /api/v1 | ⏳ Pendente |
+| 1E | CRUD Base + Service Layer | ✅ Concluída |
+| 1F | Endpoints REST /api/v1 | ✅ Concluída |
+| 1G | Testes Automatizados pytest + httpx | ✅ Concluída — 68/68 |
+| 2A | Frontend React + Vite + Tailwind | ⏳ Próxima |
 
 ---
 
 ## Decisões Pendentes
 
-- [ ] Avaliar `computed_field` no `config.py` para gerar `DATABASE_URL` automaticamente
-- [ ] Avaliar soft delete (`deleted_at`) vs `is_active` para auditoria
-- [ ] Avaliar `RefreshToken` model separado para revogar tokens individuais (blacklist)
-- [ ] Avaliar `Checklist/ChecklistItem` model (checklist de campo — fase 2)
-- [ ] Definir estratégia de geração do `order_number` (ex: `OS-2025-00042`)
+- [ ] `order_number` como `INTEGER` no banco (atual é VARCHAR)
+- [ ] `assigned_to` no schema → renomear para `technician_id` para consistência
+- [ ] Avaliar soft delete (`deleted_at`) vs `is_active`
+- [ ] Avaliar `RefreshToken` model para blacklist
+- [ ] Avaliar `Checklist/ChecklistItem` model (fase 2)
+- [ ] Avaliar `computed_field` no config.py para DATABASE_URL automático
