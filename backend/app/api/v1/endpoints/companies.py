@@ -25,4 +25,4 @@ async def update_my_company(
     db: AsyncSession = Depends(get_db),
 ):
     """Atualiza dados da empresa. Apenas OWNER."""
-    return await company_service.update(db, current_user.company_id, payload)
+    return await company_service.update(db, company_id=current_user.company_id, data=payload)

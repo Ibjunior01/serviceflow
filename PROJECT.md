@@ -1,7 +1,7 @@
 # ServiceFlow — Project Continuity Document
 
 ## Sessão Atual
-**Fase:** 1G — Testes Automatizados (pytest + httpx)
+**Fase:** 2A — Frontend React + Vite + Tailwind
 **Status:** Aguardando início
 
 ## Progresso das Fases
@@ -14,8 +14,8 @@
 | 1D | Auth JWT (login, refresh, dependency) | ✅ Concluída |
 | 1E | CRUD Base + Service Layer | ✅ Concluída |
 | 1F | Endpoints REST /api/v1 | ✅ Concluída |
-| 1G | Testes Automatizados pytest + httpx | ⏳ Próxima |
-| 2A | Frontend React + Vite + Tailwind | 🔜 Futura |
+| 1G | Testes Automatizados pytest + httpx | ✅ Concluída |
+| 2A | Frontend React + Vite + Tailwind | ⏳ Próxima |
 
 ## Decisões de Arquitetura Tomadas
 - Async engine (asyncpg) para performance sob carga
@@ -61,6 +61,13 @@
 - Apenas OWNER pode alterar roles
 - Campos do model `Customer` detalhados (`address_street`, `address_number`, etc.)
 - `assigned_to` no schema de OS mapeia para `technician_id` no model
+- Testes usam `drop_all/create_all` por teste (sem rollback/truncate — incompatível com asyncpg no Windows)
+- `asyncio_default_fixture_loop_scope = function` no pytest.ini (obrigatório para Windows + pytest-asyncio 0.24)
+- Login via JSON `{"email": ..., "password": ...}` (não OAuth2 form-data)
+- Enums serializados em lowercase pelo Pydantic v2 (`"draft"`, `"admin"`, `"high"`, etc.)
+- `service_order_service.list()` monta `PaginatedResponse[ServiceOrderSummary]` manualmente
+- Bug corrigido: `companies.py` endpoint usava args posicionais em `company_service.update()`
+- Bug corrigido: `user_service.update_role()` chamava `.value` em string já serializada
 
 ## Stack Técnica
 - **Backend:** FastAPI + Python 3.14
@@ -73,6 +80,7 @@
 - **Testes:** pytest + pytest-asyncio + httpx (AsyncClient)
 - **Banco de testes:** PostgreSQL separado via Docker (serviceflow_test)
 - **Venv:** .venv em serviceflow/ (raiz do projeto)
+- **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
 
 ## Planos e Preços
 - **Free:** R$ 0/mês
@@ -87,85 +95,103 @@ serviceflow/
 
 └── backend/
 
-├── app/
+│   ├── app/
 
-│   ├── api/v1/
+│   │   ├── api/v1/
 
-│   │   ├── router.py           ✅
+│   │   │   ├── router.py           ✅
 
-│   │   └── endpoints/
+│   │   │   └── endpoints/
 
-│   │       ├── auth.py         ✅
+│   │   │       ├── auth.py         ✅
 
-│   │       ├── companies.py    ✅
+│   │   │       ├── companies.py    ✅
 
-│   │       ├── users.py        ✅
+│   │   │       ├── users.py        ✅
 
-│   │       ├── customers.py    ✅
+│   │   │       ├── customers.py    ✅
 
-│   │       └── service_orders.py ✅
+│   │   │       └── service_orders.py ✅
 
-│   ├── core/
+│   │   ├── core/
 
-│   │   ├── config.py           ✅
+│   │   │   ├── config.py           ✅
 
-│   │   ├── security.py         ✅
+│   │   │   ├── security.py         ✅
 
-│   │   ├── dependencies.py     ✅
+│   │   │   ├── dependencies.py     ✅
 
-│   │   └── exceptions.py       ✅
+│   │   │   └── exceptions.py       ✅
 
-│   ├── db/
+│   │   ├── db/
 
-│   │   ├── session.py          ✅
+│   │   │   ├── session.py          ✅
 
-│   │   └── base.py
+│   │   │   └── base.py             ✅
 
-│   ├── models/                 ✅
+│   │   ├── models/                 ✅
 
-│   ├── repositories/           ✅
+│   │   ├── repositories/           ✅
 
-│   ├── schemas/                ✅
+│   │   ├── schemas/                ✅
 
-│   ├── services/               ✅
+│   │   ├── services/               ✅
 
-│   └── main.py                 ✅
+│   │   └── main.py                 ✅
 
-├── tests/                      ⏳ a criar
+│   ├── tests/                      ✅
 
-│   ├── conftest.py             ← fixtures globais (db, client, usuários)
+│   │   ├── conftest.py             ✅
 
-│   ├── test_auth.py            ← register, login, refresh, me
+│   │   ├── test_auth.py            ✅
 
-│   ├── test_companies.py       ← GET/PATCH /me
+│   │   ├── test_companies.py       ✅
 
-│   ├── test_users.py           ← CRUD + role + guards RBAC
+│   │   ├── test_users.py           ✅
 
-│   ├── test_customers.py       ← CRUD + isolamento tenant
+│   │   ├── test_customers.py       ✅
 
-│   └── test_service_orders.py  ← CRUD + FSM + items + guards
+│   │   └── test_service_orders.py  ✅
 
-├── alembic/versions/
+│   ├── alembic/versions/
 
-│   ├── 06d5ab8065eb_initial_schema.py          ✅
+│   │   ├── 06d5ab8065eb_initial_schema.py          ✅
 
-│   └── xxxx_expand_customer_address_fields.py  ✅
+│   │   └── xxxx_expand_customer_address_fields.py  ✅
 
-├── .env
+│   ├── .env
 
-├── .env.example
+│   ├── .env.example
 
-├── .env.test                   ⏳ a criar
+│   ├── .env.test                   ✅
 
-├── alembic.ini
+│   ├── pytest.ini                  ✅
 
-├── docker-compose.yml
+│   ├── alembic.ini
 
-├── Dockerfile
+│   ├── docker-compose.yml
 
-├── requirements.txt
+│   ├── Dockerfile
 
-└── requirements.lock
+│   ├── requirements.txt
+
+│   └── requirements.lock
+
+└── frontend/                       ⏳ a criar
+
+    ├── src/
+
+    ├── public/
+
+    ├── index.html
+
+    ├── vite.config.ts
+
+    ├── tsconfig.json
+
+    ├── tailwind.config.ts
+
+    └── package.json
 
 ## Endpoints Implementados (Fase 1F)
 
@@ -216,29 +242,41 @@ serviceflow/
 | POST | `/api/v1/orders/{id}/items` | TechOrAbove |
 | DELETE | `/api/v1/orders/{id}/items/{item_id}` | TechOrAbove |
 
-## Plano Fase 1G — Testes Automatizados
+## Plano Fase 1G — Testes Automatizados ✅ CONCLUÍDA
 
-### Dependências a instalar
-pytest==8.3.5
+### Resultado: 68/68 passando
+| Área | Resultado |
+|------|-----------|
+| Auth | ✅ 12/12 |
+| Companies | ✅ 5/5 |
+| Users + RBAC | ✅ 12/12 |
+| Customers + Tenant | ✅ 10/10 |
+| Service Orders + FSM + Items | ✅ 29/29 |
 
-pytest-asyncio==0.24.0
+## Plano Fase 2A — Frontend React + Vite + Tailwind
+**Status:** ⏳ Próxima
 
-httpx==0.27.0
+### Stack
+- React 18 + Vite + TypeScript
+- Tailwind CSS + shadcn/ui
+- React Router v6
+- Axios com interceptor JWT (access + refresh automático)
+- TanStack Query v5 para cache e sincronização de dados
 
-### Estratégia
-- Banco de testes isolado (`serviceflow_test`) no mesmo Docker
-- Fixtures criam e destroem dados a cada teste
-- `AsyncClient` do httpx aponta para a app FastAPI diretamente (sem servidor real)
-- Cada arquivo de teste é independente — sem dependência de ordem
+### Telas previstas
+| Tela | Rota |
+|------|------|
+| Login | `/login` |
+| Dashboard | `/` |
+| Ordens de Serviço | `/orders` |
+| Detalhe da OS | `/orders/:id` |
+| Clientes | `/customers` |
+| Usuários | `/users` |
+| Configurações da Empresa | `/settings` |
 
-### Casos críticos a cobrir
-| Área | Casos |
-|------|-------|
-| Auth | register, login, token expirado, refresh |
-| RBAC | técnico bloqueado em rota AdminOnly, viewer bloqueado |
-| FSM | transições válidas, transições inválidas, terminal |
-| Guards | editar OS finalizada, deletar não-DRAFT |
-| Tenant | usuário de empresa A não acessa dados de empresa B |
+### Deploy target
+- Frontend: Vercel
+- Backend: Hetzner VPS (fase posterior)
 
 ## Decisões Pendentes / A Revisar
 - [ ] `order_number` como `INTEGER` no banco (atual é VARCHAR)

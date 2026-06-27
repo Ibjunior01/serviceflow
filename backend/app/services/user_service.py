@@ -107,7 +107,7 @@ class UserService:
             raise BusinessRuleError("Não é possível alterar o role do owner")
 
         return await user_repo.update(
-            db, db_obj=user, obj_in={"role": data.role.value}
+            db, db_obj=user, obj_in={"role": data.role.value if hasattr(data.role, "value") else data.role}
         )
 
     async def delete(

@@ -4,13 +4,15 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.service_order import ServiceOrder, ServiceItem, OrderStatus
-from app.schemas.service_order import ServiceOrderCreate, ServiceOrderUpdate, ServiceOrderStatusUpdate
+from app.schemas.service_order import ServiceOrderCreate, ServiceOrderUpdate, ServiceOrderStatusUpdate, ServiceOrderSummary
 from app.schemas.service_item import ServiceItemCreate
+from app.schemas.common import PaginatedResponse
 
 
 from app.models.user import User, UserRole
 from app.repositories.service_order import service_order_repo
 from app.repositories.customer import customer_repo
+from math import ceil
 from app.core.exceptions import NotFoundError, ForbiddenError, BusinessRuleError
 
 # Transições válidas de status
@@ -33,25 +35,32 @@ class ServiceOrderService:
             raise NotFoundError("Ordem de serviço não encontrada")
         return order
 
-    async def list(
-        self,
-        db: AsyncSession,
-        company_id: UUID,
-        *,
-        skip: int = 0,
-        limit: int = 20,
-        status: OrderStatus | None = None,
-        technician_id: UUID | None = None,
-        customer_id: UUID | None = None,
-    ):
-        return await service_order_repo.list_by_company(
-            db,
-            company_id,
-            skip=skip,
-            limit=limit,
-            status=status,
-            technician_id=technician_id,
-            customer_id=customer_id,
+    
+    async def list(self, db, company_id, *, skip, limit, status, technician_id, customer_id):
+        items, total = await service_order_repo.list_by_company(db, company_id, skip=skip, limit=limit, status=status, technician_id=technician_id, customer_id=customer_id)
+        
+        summaries = [
+            ServiceOrderSummary(
+                id=o.id,
+                order_number=o.order_number,
+                title=o.title,
+                status=o.status,
+                priority=o.priority,
+                customer_name=o.customer.name,  # customer já carregado via selectin
+                technician_name=o.technician.full_name if o.technician else None,
+                scheduled_at=o.scheduled_at,
+                total_amount=o.total_amount,
+                created_at=o.created_at,
+            )
+            for o in items
+        ]
+        
+        return PaginatedResponse(
+            items=summaries,
+            total=total,
+            page=skip // limit + 1,
+            page_size=limit,
+            total_pages=ceil(total / limit) if limit else 1,
         )
 
     async def create(
