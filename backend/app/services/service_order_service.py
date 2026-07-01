@@ -182,7 +182,13 @@ class ServiceOrderService:
             if str(order.technician_id) != str(requesting_user.id):
                 raise ForbiddenError("Técnico só pode editar suas próprias OS")
 
-        return await service_order_repo.create_item(db, order_id=order_id, data=data)
+        item = await service_order_repo.create_item(db, order_id=order_id, data=data)
+
+        # Recalcula total_amount da OS
+        new_total = sum(i.total_price for i in order.items) + item.total_price
+        await service_order_repo.update(db, db_obj=order, obj_in={"total_amount": new_total})
+
+        return item
 
     async def remove_item(
         self,
@@ -210,6 +216,10 @@ class ServiceOrderService:
         if not item:
             raise NotFoundError("Item não encontrado nesta OS")
 
+        # Recalcula total_amount antes de deletar
+        new_total = sum(i.total_price for i in order.items if str(i.id) != str(item_id))
+        # Atualiza total ANTES de deletar
+        await service_order_repo.update(db, db_obj=order, obj_in={"total_amount": new_total})
         await service_order_repo.delete_item(db, item=item)
 
 

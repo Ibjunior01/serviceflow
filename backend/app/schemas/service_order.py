@@ -69,6 +69,9 @@ class ServiceOrderResponse(ServiceOrderBase):
     company_id: UUID
     status: OrderStatus
     total_amount: Decimal
+    customer_name: Optional[str] = None
+    technician_name: Optional[str] = None
+    started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

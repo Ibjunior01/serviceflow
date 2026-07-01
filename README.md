@@ -132,6 +132,11 @@ uvicorn app.main:app --reload
 http://localhost:8000/docs
 ```
 
+
+### 6. Acessar Frontend
+```powershell
+npm run dev
+```
 ---
 
 ### Script de startup rápido

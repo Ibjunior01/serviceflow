@@ -43,8 +43,8 @@ class CustomerBase(BaseSchema):
     @field_validator("document")
     @classmethod
     def validate_document(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
+        if not v:
+            return None
         digits = "".join(filter(str.isdigit, v))
         if len(digits) not in (11, 14):
             raise ValueError("Documento deve ter 11 dígitos (CPF) ou 14 (CNPJ).")

@@ -58,11 +58,11 @@ class ServiceOrderRepository(CRUDBase[ServiceOrder]):
         return items, total
 
     async def get_next_order_number(self, db: AsyncSession, company_id: UUID) -> int:
-        stmt = select(func.count()).select_from(ServiceOrder).where(
+        stmt = select(func.max(ServiceOrder.order_number)).where(
             ServiceOrder.company_id == company_id
         )
-        count = (await db.execute(stmt)).scalar_one()
-        return  + 1
+        max_number = (await db.execute(stmt)).scalar_one_or_none()
+        return (int(max_number) if max_number else 0) + 1
 
     async def create_item(
         self,
@@ -71,12 +71,14 @@ class ServiceOrderRepository(CRUDBase[ServiceOrder]):
         order_id: UUID,
         data: ServiceItemCreate,
     ) -> ServiceItem:
+        total = data.quantity * data.unit_price
         item = ServiceItem(
             service_order_id=order_id,
             description=data.description,
             item_type=data.item_type if isinstance(data.item_type, str) else data.item_type.value,
             quantity=data.quantity,
             unit_price=data.unit_price,
+            total_price=total,
         )
         db.add(item)
         await db.flush()

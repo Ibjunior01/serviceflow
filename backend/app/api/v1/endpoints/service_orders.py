@@ -58,7 +58,28 @@ async def get_order(
     current_user: TechOrAbove,
     db: AsyncSession = Depends(get_db),
 ):
-    return await service_order_service.get_or_404(db, order_id, current_user.company_id)
+    order = await service_order_service.get_or_404(db, order_id, current_user.company_id)
+    return ServiceOrderResponse(
+        id=order.id,
+        order_number=order.order_number,
+        company_id=order.company_id,
+        customer_id=order.customer_id,
+        customer_name=order.customer.name if order.customer else None,
+        assigned_to=order.technician_id,
+        technician_name=order.technician.full_name if order.technician else None,
+        title=order.title,
+        description=order.description,
+        priority=order.priority,
+        status=order.status,
+        scheduled_at=order.scheduled_at,
+        started_at=order.started_at,
+        completed_at=order.completed_at,
+        total_amount=order.total_amount,
+        notes=order.internal_notes,
+        location_address=order.service_address,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
 
 
 @router.patch("/{order_id}", response_model=ServiceOrderResponse)
