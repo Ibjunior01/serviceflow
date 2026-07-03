@@ -63,7 +63,7 @@ export default function DashboardPage() {
 
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
-    const firstName = user?.name?.split(' ')[0] ?? ''
+    const firstName = user?.full_name?.split(' ')[0] ?? ''
 
     return (
         <div style={{ maxWidth: '960px' }}>

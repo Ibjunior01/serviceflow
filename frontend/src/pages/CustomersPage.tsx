@@ -21,6 +21,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/store/authStore'
+import { TableSkeleton } from '@/components/ui/table-skeleton'
+
 
 function CustomerForm({
     initial,
@@ -215,58 +217,56 @@ export default function CustomersPage() {
                             {isAdmin && <TableHead className="w-[100px]">Ações</TableHead>}
                         </TableRow>
                     </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow>
-                                <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-10 text-muted-foreground">
-                                    Carregando...
-                                </TableCell>
-                            </TableRow>
-                        ) : customers.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-10 text-muted-foreground">
-                                    {search ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado ainda.'}
-                                </TableCell>
-                            </TableRow>
-                        ) : customers.map((c) => (
-                            <TableRow key={c.id}>
-                                <TableCell className="font-medium">{c.name}</TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
-                                        {c.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</span>}
-                                        {c.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>}
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    {(c.address_city || c.address_state) ? (
-                                        <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                                            <MapPin className="w-3 h-3" />
-                                            {[c.address_city, c.address_state].filter(Boolean).join(' — ')}
-                                        </span>
-                                    ) : <span className="text-muted-foreground text-sm">—</span>}
-                                </TableCell>
-                                <TableCell>
-                                    {c.document
-                                        ? <Badge variant="outline">{c.document}</Badge>
-                                        : <span className="text-muted-foreground text-sm">—</span>}
-                                </TableCell>
-                                {isAdmin && (
+                    {isLoading ? (
+                        <TableSkeleton rows={6} columns={isAdmin ? 5 : 4} />
+                    ) : (
+                        <TableBody>
+                            {customers.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-10 text-muted-foreground">
+                                        {search ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado ainda.'}
+                                    </TableCell>
+                                </TableRow>
+                            ) : customers.map((c) => (
+                                <TableRow key={c.id}>
+                                    <TableCell className="font-medium">{c.name}</TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            <Button size="icon" variant="ghost" onClick={() => openEdit(c)}>
-                                                <Pencil className="w-4 h-4" />
-                                            </Button>
-                                            <Button size="icon" variant="ghost"
-                                                className="text-destructive hover:text-destructive"
-                                                onClick={() => setDeletingId(c.id)}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
+                                        <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+                                            {c.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</span>}
+                                            {c.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>}
                                         </div>
                                     </TableCell>
-                                )}
-                            </TableRow>
-                        ))}
-                    </TableBody>
+                                    <TableCell>
+                                        {(c.address_city || c.address_state) ? (
+                                            <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                                                <MapPin className="w-3 h-3" />
+                                                {[c.address_city, c.address_state].filter(Boolean).join(' — ')}
+                                            </span>
+                                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                        {c.document
+                                            ? <Badge variant="outline">{c.document}</Badge>
+                                            : <span className="text-muted-foreground text-sm">—</span>}
+                                    </TableCell>
+                                    {isAdmin && (
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                <Button size="icon" variant="ghost" onClick={() => openEdit(c)}>
+                                                    <Pencil className="w-4 h-4" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost"
+                                                    className="text-destructive hover:text-destructive"
+                                                    onClick={() => setDeletingId(c.id)}>
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    )}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    )}
                 </Table>
             </div>
 

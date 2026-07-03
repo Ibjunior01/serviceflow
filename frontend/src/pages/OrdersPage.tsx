@@ -9,6 +9,7 @@ import { ordersApi, type ServiceOrder } from '@/api/orders'
 import { useCreateOrder } from '@/hooks/useOrders'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ─── Schema de validação ──────────────────────────────────────────────────────
 const createOrderSchema = z.object({
@@ -429,9 +430,28 @@ export default function OrdersPage() {
 
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                 {isLoading ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
-                        Carregando…
-                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                {['Nº', 'Título', 'Cliente', 'Técnico', 'Prioridade', 'Status', 'Data'].map((h) => (
+                                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                        {h}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {Array.from({ length: 8 }).map((_, i) => (
+                                <tr key={i} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                                    {Array.from({ length: 7 }).map((_, j) => (
+                                        <td key={j} style={{ padding: '12px 16px' }}>
+                                            <Skeleton className="h-4 w-full" />
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 ) : orders.length === 0 ? (
                     <div style={{ padding: '60px', textAlign: 'center' }}>
                         <p style={{ fontSize: '15px', fontWeight: 500, color: '#0f172a', margin: '0 0 6px' }}>

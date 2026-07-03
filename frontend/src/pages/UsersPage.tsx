@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { TableSkeleton } from '@/components/ui/table-skeleton'
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -94,8 +95,8 @@ export default function UsersPage() {
     const updateRoleMutation = useUpdateUserRole()
     const deleteMutation = useDeleteUser()
 
-
     const users: AppUser[] = data?.items ?? []
+    const columnCount = isOwner ? 5 : 4
 
     const handleCreate = async (payload: UserCreate) => {
         try {
@@ -157,48 +158,46 @@ export default function UsersPage() {
                             {isOwner && <TableHead className="w-[120px]">Ações</TableHead>}
                         </TableRow>
                     </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow>
-                                <TableCell colSpan={isOwner ? 5 : 4} className="text-center py-10 text-muted-foreground">
-                                    Carregando...
-                                </TableCell>
-                            </TableRow>
-                        ) : users.map((u) => (
-                            <TableRow key={u.id} className={u.id === me?.id ? 'bg-muted/30' : ''}>
-                                <TableCell className="font-medium">
-                                    {u.full_name}
-                                    {u.id === me?.id && <span className="ml-2 text-xs text-muted-foreground">(você)</span>}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                                <TableCell><RoleBadge role={u.role} /></TableCell>
-                                <TableCell>
-                                    <Badge variant={u.is_active ? 'default' : 'secondary'}>
-                                        {u.is_active ? 'Ativo' : 'Inativo'}
-                                    </Badge>
-                                </TableCell>
-                                {isOwner && (
-                                    <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            {u.role !== 'owner' && (
-                                                <Button size="sm" variant="outline"
-                                                    onClick={() => { setRoleDialogUser(u); setNewRole(u.role) }}>
-                                                    Perfil
-                                                </Button>
-                                            )}
-                                            {u.id !== me?.id && (
-                                                <Button size="icon" variant="ghost"
-                                                    className="text-destructive hover:text-destructive"
-                                                    onClick={() => setDeletingId(u.id)}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            )}
-                                        </div>
+                    {isLoading ? (
+                        <TableSkeleton rows={5} columns={columnCount} />
+                    ) : (
+                        <TableBody>
+                            {users.map((u) => (
+                                <TableRow key={u.id} className={u.id === me?.id ? 'bg-muted/30' : ''}>
+                                    <TableCell className="font-medium">
+                                        {u.full_name}
+                                        {u.id === me?.id && <span className="ml-2 text-xs text-muted-foreground">(você)</span>}
                                     </TableCell>
-                                )}
-                            </TableRow>
-                        ))}
-                    </TableBody>
+                                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                                    <TableCell><RoleBadge role={u.role} /></TableCell>
+                                    <TableCell>
+                                        <Badge variant={u.is_active ? 'default' : 'secondary'}>
+                                            {u.is_active ? 'Ativo' : 'Inativo'}
+                                        </Badge>
+                                    </TableCell>
+                                    {isOwner && (
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                {u.role !== 'owner' && (
+                                                    <Button size="sm" variant="outline"
+                                                        onClick={() => { setRoleDialogUser(u); setNewRole(u.role) }}>
+                                                        Perfil
+                                                    </Button>
+                                                )}
+                                                {u.id !== me?.id && (
+                                                    <Button size="icon" variant="ghost"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() => setDeletingId(u.id)}>
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    )}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    )}
                 </Table>
             </div>
 

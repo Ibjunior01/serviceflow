@@ -97,7 +97,7 @@ function CompanySection() {
 function ProfileSection() {
     const { user, setUser } = useAuthStore()
     
-    const [form, setForm] = useState({ name: user?.name ?? '', email: user?.email ?? '' })
+    const [form, setForm] = useState({ name: user?.full_name ?? '', email: user?.email ?? '' })
     const [saving, setSaving] = useState(false)
 
     const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>

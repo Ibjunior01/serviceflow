@@ -65,8 +65,8 @@ export default function Sidebar() {
         navigate('/login')
     }
 
-    const initials = user?.name
-        ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+    const initials = user?.full_name
+        ? user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
         : '?'
 
     return (
@@ -142,7 +142,7 @@ export default function Sidebar() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ color: '#f8fafc', fontSize: '13px', fontWeight: 500, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {user?.name ?? '—'}
+                            {user?.full_name ?? '—'}
                         </p>
                         <p style={{ color: '#64748b', fontSize: '11px', margin: 0, textTransform: 'capitalize' }}>
                             {user?.role ?? '—'}

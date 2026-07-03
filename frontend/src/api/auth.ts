@@ -13,7 +13,7 @@ export interface AuthResponse {
 
 export interface MeResponse {
   id: string
-  name: string
+  full_name: string
   email: string
   role: 'owner' | 'admin' | 'technician' | 'viewer'
   company_id: string

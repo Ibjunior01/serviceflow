@@ -2,7 +2,7 @@
 
 ## Sessão Atual
 **Fase:** 2B — Polimento de UX + Preparação para Deploy
-**Status:** Em andamento — validação E2E concluída, skeleton loading pendente
+**Status:** Bug `name`/`full_name` resolvido e testado E2E. Próximo: skeleton loading.
 
 ## Progresso das Fases
 
@@ -83,7 +83,7 @@
 - `null` vindo da API não é atribuível a `string | undefined` — converter com `?? undefined` ao passar para forms
 - `react-hook-form` + `zod` + `@hookform/resolvers` instalados para validação de formulários
 - Enum `priority` no backend usa `normal` (não `medium`) — mapear `normal` → "Média" no frontend
-- Campo de nome de usuário na API é `full_name` (não `name`) — AppUser e UserCreate usam `full_name`
+- Campo de nome de usuário na API é `full_name` (não `name`) — ver seção de bugs abaixo, esse padrão se repetiu em 4 arquivos diferentes
 - `<select>` nativo no Chrome/Windows ignora `style` em `<option>` — usar componente `CustomSelect` com dropdown feito em JSX para casos onde cor/estilo importa
 - `CustomSelect` controlado via `useState` local — não registrar no react-hook-form via `register()`, incluir valor manualmente no payload do `onSubmit`
 - Guard de permissão `canCreate`/`canAssign` baseado em `useAuthStore` para esconder ações por role
@@ -95,6 +95,34 @@
 - Bug corrigido: `toast.error(msg)` explodia quando `detail` era array Pydantic v2 — tratar com `Array.isArray`
 - Técnico autônomo deve se cadastrar como `owner` — fluxo natural do registro já garante isso
 - `POST /api/v1/orders` permanece `AdminOnly` — técnico autônomo opera como owner
+- `Header.tsx` não existe fisicamente apesar de estar listado no PROJECT.md como concluído — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
+- `src/types/api.ts` está vazio apesar de listado como concluído — cada arquivo (`authStore.ts`, `api/auth.ts`, hooks) define seus próprios tipos de forma independente, causa raiz da cadeia de bugs abaixo
+- `hooks/useAuth.ts` está vazio e não é importado em lugar nenhum — código morto do scaffold da Fase 2A, nunca implementado
+
+## Bugs corrigidos na sessão de 2B.2 (cadeia name vs full_name)
+Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend).
+
+Corrigidos:
+- `src/store/authStore.ts` — `AuthUser.name` trocado para `AuthUser.full_name`
+- `src/api/auth.ts` — `MeResponse.name` trocado para `MeResponse.full_name` (linha 16)
+- `src/components/layout/Sidebar.tsx` — `user?.name` trocado para `user?.full_name` (2 ocorrências: cálculo de `initials` e texto exibido no rodapé)
+
+Confirmado como correto / falso positivo (campo `name` é o certo para essas entidades, não confundir com o bug):
+- `src/api/customers.ts:5` — Customer usa `name`
+- `src/hooks/useCompany.ts:6` — Company usa `name`
+- `src/hooks/useCustomers.ts:6,21` — Customer usa `name`
+- `src/hooks/useUsers.ts:8,16` — já usava `full_name` corretamente
+- `NewUserForm` (dentro de UsersPage) — já usava `full_name` corretamente em todo o componente
+
+Verificado via teste E2E, mas vale re-observar no futuro:
+- `src/pages/OrdersPage.tsx:86` — `options: { id: string; name: string }[]` no dropdown de atribuição de técnico. Passou no teste manual (nomes aparecem certos), mas não houve acesso ao código-fonte completo dessa linha para confirmar 100% a origem do `name` — se algum técnico aparecer sem nome no dropdown futuramente, checar aqui primeiro.
+
+Testes E2E realizados e aprovados nesta sessão:
+1. Login sem F5 → nome e iniciais aparecem corretos na Sidebar imediatamente
+2. Verificação do objeto `user` no estado do authStore → `full_name` presente e correto
+3. F5 após login → nome permanece correto (sem regressão de hidratação)
+4. Dropdown de técnico no OrdersPage → nomes aparecem corretos
+5. Edição de perfil (SettingsPage) → salva e persiste `full_name` corretamente
 
 ## Stack Técnica
 - **Backend:** FastAPI + Python 3.14
@@ -115,91 +143,91 @@
 - **Formulários:** react-hook-form + zod + @hookform/resolvers
 
 ## Planos e Preços
-- **Free:** R$ 0/mês
-- **Básico:** R$ 67/mês
-- **Pro:** R$ 127/mês
-- **Empresa:** R$ 247/mês
+- Free: R$ 0/mês
+- Básico: R$ 67/mês
+- Pro: R$ 127/mês
+- Empresa: R$ 247/mês
 
 ## Estrutura de Pastas (estado atual)
+
 serviceflow/
 ├── .venv/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/
-│   │   │   ├── router.py                          ✅
+│   │   │   ├── router.py                          OK
 │   │   │   └── endpoints/
-│   │   │       ├── auth.py                        ✅
-│   │   │       ├── companies.py                   ✅
-│   │   │       ├── users.py                       ✅
-│   │   │       ├── customers.py                   ✅
-│   │   │       └── service_orders.py              ✅
+│   │   │       ├── auth.py                        OK
+│   │   │       ├── companies.py                   OK
+│   │   │       ├── users.py                       OK
+│   │   │       ├── customers.py                   OK
+│   │   │       └── service_orders.py              OK
 │   │   ├── core/
-│   │   │   ├── config.py                          ✅
-│   │   │   ├── security.py                        ✅
-│   │   │   ├── dependencies.py                    ✅
-│   │   │   └── exceptions.py                      ✅
+│   │   │   ├── config.py                          OK
+│   │   │   ├── security.py                        OK
+│   │   │   ├── dependencies.py                    OK
+│   │   │   └── exceptions.py                      OK
 │   │   ├── db/
-│   │   │   ├── session.py                         ✅
-│   │   │   └── base.py                            ✅
-│   │   ├── models/                                ✅
-│   │   ├── repositories/                          ✅
-│   │   ├── schemas/                               ✅
-│   │   ├── services/                              ✅
-│   │   └── main.py                                ✅
-│   ├── tests/                                     ✅
-│   │   ├── conftest.py                            ✅
-│   │   ├── test_auth.py                           ✅
-│   │   ├── test_companies.py                      ✅
-│   │   ├── test_users.py                          ✅
-│   │   ├── test_customers.py                      ✅
-│   │   └── test_service_orders.py                 ✅
+│   │   │   ├── session.py                         OK
+│   │   │   └── base.py                            OK
+│   │   ├── models/                                OK
+│   │   ├── repositories/                          OK
+│   │   ├── schemas/                                OK
+│   │   ├── services/                               OK
+│   │   └── main.py                                 OK
+│   ├── tests/                                      OK
+│   │   ├── conftest.py                             OK
+│   │   ├── test_auth.py                            OK
+│   │   ├── test_companies.py                       OK
+│   │   ├── test_users.py                           OK
+│   │   ├── test_customers.py                       OK
+│   │   └── test_service_orders.py                  OK
 │   ├── alembic/versions/
-│   │   ├── 06d5ab8065eb_initial_schema.py         ✅
-│   │   └── xxxx_expand_customer_address_fields.py ✅
+│   │   ├── 06d5ab8065eb_initial_schema.py          OK
+│   │   └── xxxx_expand_customer_address_fields.py  OK
 │   ├── .env
 │   ├── .env.example
-│   ├── .env.test                                  ✅
-│   ├── pytest.ini                                 ✅
+│   ├── .env.test                                   OK
+│   ├── pytest.ini                                  OK
 │   ├── alembic.ini
 │   ├── docker-compose.yml
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── requirements.lock
-└── frontend/                                      ✅
+└── frontend/                                       OK
     ├── src/
     │   ├── api/
-    │   │   ├── client.ts                          ✅ (axios + interceptor JWT)
-    │   │   ├── auth.ts                            ✅
-    │   │   ├── customers.ts                       ✅
-    │   │   ├── orders.ts                          ✅ (create, update, delete adicionados)
-    │   │   └── users.ts                           ✅
+    │   │   ├── client.ts                           OK (axios + interceptor JWT)
+    │   │   ├── auth.ts                             OK (full_name corrigido nesta sessão)
+    │   │   ├── customers.ts                        OK
+    │   │   ├── orders.ts                           OK (create, update, delete adicionados)
+    │   │   └── users.ts                             OK
     │   ├── components/
     │   │   ├── layout/
-    │   │   │   ├── AppLayout.tsx                  ✅
-    │   │   │   ├── Header.tsx                     ✅
-    │   │   │   └── Sidebar.tsx                    ✅
-    │   │   └── ui/                                ✅ (shadcn/ui components)
+    │   │   │   ├── AppLayout.tsx                   OK
+    │   │   │   └── Sidebar.tsx                     OK (full_name corrigido nesta sessão; Header.tsx não existe, funcionalidade está aqui)
+    │   │   └── ui/                                  OK (shadcn/ui components)
     │   ├── hooks/
-    │   │   ├── useAuth.ts                         ✅
-    │   │   ├── useCompany.ts                      ✅
-    │   │   ├── useCustomers.ts                    ✅
-    │   │   ├── useOrders.ts                       ✅ (criado do zero nesta sessão)
-    │   │   └── useUsers.ts                        ✅ (full_name corrigido)
+    │   │   ├── useAuth.ts                          VAZIO — código morto, não importado em lugar nenhum
+    │   │   ├── useCompany.ts                       OK
+    │   │   ├── useCustomers.ts                     OK
+    │   │   ├── useOrders.ts                        OK
+    │   │   └── useUsers.ts                          OK (full_name correto)
     │   ├── pages/
-    │   │   ├── LoginPage.tsx                      ✅
-    │   │   ├── DashboardPage.tsx                  ✅ (priority normal corrigido)
-    │   │   ├── OrdersPage.tsx                     ✅ (modal criação + CustomSelect)
-    │   │   ├── OrderDetailPage.tsx                ✅
-    │   │   ├── CustomersPage.tsx                  ✅
-    │   │   ├── UsersPage.tsx                      ✅ (full_name corrigido)
-    │   │   └── SettingsPage.tsx                   ✅
+    │   │   ├── LoginPage.tsx                       OK
+    │   │   ├── DashboardPage.tsx                   OK
+    │   │   ├── OrdersPage.tsx                      OK (verificar linha 86 — ver seção de bugs)
+    │   │   ├── OrderDetailPage.tsx                 OK
+    │   │   ├── CustomersPage.tsx                   OK
+    │   │   ├── UsersPage.tsx                       OK (NewUserForm correto)
+    │   │   └── SettingsPage.tsx                    OK (form de perfil testado, salva full_name corretamente)
     │   ├── router/
-    │   │   └── index.tsx                          ✅
+    │   │   └── index.tsx                           OK (ProtectedRoute via accessToken, reativo, sem bugs)
     │   ├── store/
-    │   │   └── authStore.ts                       ✅
+    │   │   └── authStore.ts                        OK (full_name corrigido nesta sessão)
     │   ├── types/
-    │   │   └── api.ts                             ✅
-    │   └── main.tsx                               ✅ (Toaster montado)
+    │   │   └── api.ts                              VAZIO — causa raiz da cadeia de bugs desta sessão
+    │   └── main.tsx                                 OK (Toaster montado)
     ├── index.html
     ├── vite.config.ts
     ├── tsconfig.app.json
@@ -212,51 +240,51 @@ serviceflow/
 ### Auth
 | Método | Rota | Auth |
 |--------|------|------|
-| POST | `/api/v1/auth/register` | Público |
-| POST | `/api/v1/auth/login` | Público |
-| POST | `/api/v1/auth/refresh` | Público |
-| GET | `/api/v1/auth/me` | Bearer |
+| POST | /api/v1/auth/register | Público |
+| POST | /api/v1/auth/login | Público |
+| POST | /api/v1/auth/refresh | Público |
+| GET | /api/v1/auth/me | Bearer |
 
 ### Companies
 | Método | Rota | Auth |
 |--------|------|------|
-| GET | `/api/v1/companies/me` | CurrentUser |
-| PATCH | `/api/v1/companies/me` | OwnerOnly |
+| GET | /api/v1/companies/me | CurrentUser |
+| PATCH | /api/v1/companies/me | OwnerOnly |
 
 ### Users
 | Método | Rota | Auth |
 |--------|------|------|
-| GET | `/api/v1/users` | AdminOnly |
-| POST | `/api/v1/users` | AdminOnly |
-| GET | `/api/v1/users/me` | CurrentUser |
-| GET | `/api/v1/users/{id}` | AdminOnly |
-| PATCH | `/api/v1/users/{id}` | CurrentUser |
-| DELETE | `/api/v1/users/{id}` | OwnerOnly |
-| PATCH | `/api/v1/users/{id}/role` | OwnerOnly |
+| GET | /api/v1/users | AdminOnly |
+| POST | /api/v1/users | AdminOnly |
+| GET | /api/v1/users/me | CurrentUser |
+| GET | /api/v1/users/{id} | AdminOnly |
+| PATCH | /api/v1/users/{id} | CurrentUser |
+| DELETE | /api/v1/users/{id} | OwnerOnly |
+| PATCH | /api/v1/users/{id}/role | OwnerOnly |
 
 ### Customers
 | Método | Rota | Auth |
 |--------|------|------|
-| GET | `/api/v1/customers` | TechOrAbove |
-| POST | `/api/v1/customers` | AdminOnly |
-| GET | `/api/v1/customers/{id}` | TechOrAbove |
-| PATCH | `/api/v1/customers/{id}` | AdminOnly |
-| DELETE | `/api/v1/customers/{id}` | AdminOnly |
+| GET | /api/v1/customers | TechOrAbove |
+| POST | /api/v1/customers | AdminOnly |
+| GET | /api/v1/customers/{id} | TechOrAbove |
+| PATCH | /api/v1/customers/{id} | AdminOnly |
+| DELETE | /api/v1/customers/{id} | AdminOnly |
 
 ### Service Orders
 | Método | Rota | Auth |
 |--------|------|------|
-| GET | `/api/v1/orders` | TechOrAbove |
-| POST | `/api/v1/orders` | AdminOnly |
-| GET | `/api/v1/orders/{id}` | TechOrAbove |
-| PATCH | `/api/v1/orders/{id}` | TechOrAbove |
-| DELETE | `/api/v1/orders/{id}` | AdminOnly |
-| PATCH | `/api/v1/orders/{id}/status` | TechOrAbove |
-| GET | `/api/v1/orders/{id}/items` | TechOrAbove |
-| POST | `/api/v1/orders/{id}/items` | TechOrAbove |
-| DELETE | `/api/v1/orders/{id}/items/{item_id}` | TechOrAbove |
+| GET | /api/v1/orders | TechOrAbove |
+| POST | /api/v1/orders | AdminOnly |
+| GET | /api/v1/orders/{id} | TechOrAbove |
+| PATCH | /api/v1/orders/{id} | TechOrAbove |
+| DELETE | /api/v1/orders/{id} | AdminOnly |
+| PATCH | /api/v1/orders/{id}/status | TechOrAbove |
+| GET | /api/v1/orders/{id}/items | TechOrAbove |
+| POST | /api/v1/orders/{id}/items | TechOrAbove |
+| DELETE | /api/v1/orders/{id}/items/{item_id} | TechOrAbove |
 
-## Fase 2A — Concluída ✅
+## Fase 2A — Concluída
 - Scaffold Vite + React + TypeScript + Tailwind v4 + shadcn/ui
 - Zustand auth store com persist no localStorage
 - Axios client com interceptor JWT + refresh automático
@@ -270,19 +298,19 @@ serviceflow/
 - CustomersPage — listagem paginada, busca, cadastro, edição, exclusão
 - UsersPage — listagem, criação, troca de role (OwnerOnly), exclusão
 - SettingsPage — dados da empresa, perfil do usuário, assinatura
-- Sonner montado no main.tsx (`<Toaster richColors position="top-right" />`)
+- Sonner montado no main.tsx
 
 ## Fase 2B — Progresso atual
 - [x] Formulário de criação de OS na OrdersPage com modal + react-hook-form + zod
 - [x] Validação de formulários com react-hook-form + zod
 - [x] Confirmar que todas as telas funcionam com backend rodando (validação E2E completa)
-- [x] CustomSelect para contornar limitação do Chrome com `<option>` estilizado
+- [x] CustomSelect para contornar limitação do Chrome com option estilizado
 - [x] Guard de permissão por role em botões e campos do formulário
-- [x] Correção enum priority: `normal` em vez de `medium`
-- [x] Correção campo usuário: `full_name` em vez de `name`
+- [x] Correção enum priority: normal em vez de medium
+- [x] Correção campo usuário: full_name em vez de name
 - [x] Correção validator documento cliente: aceitar string vazia como None
-- [ ] Verificar se o `authStore` atualiza `user` no store após login (campo `name` no header)
-- [ ] Skeleton loading nas tabelas (substituir "Carregando..." por UI real)
+- [x] authStore atualiza user corretamente após login, sem F5 — resolvido e testado nesta sessão (2B.2)
+- [ ] Skeleton loading nas tabelas (substituir "Carregando..." por UI real) — próximo passo
 - [ ] Empty states com botão de ação direto
 
 ## Deploy target
@@ -290,12 +318,14 @@ serviceflow/
 - Backend: Hetzner VPS (Fase 3)
 
 ## Decisões Pendentes / A Revisar
-- [ ] `order_number` como `INTEGER` no banco (atual é VARCHAR)
-- [ ] `assigned_to` no schema → renomear para `technician_id` para consistência
-- [ ] Avaliar soft delete (`deleted_at`) vs `is_active`
-- [ ] Avaliar `RefreshToken` model para blacklist
-- [ ] Avaliar `Checklist/ChecklistItem` model (fase 2)
-- [ ] Avaliar `computed_field` no config.py para DATABASE_URL automático
-- [ ] `components.json` — trocar `"style": "radix-nova"` por `"style": "default"` para evitar bug de instalação de componentes na pasta `@`
-- [ ] `tsconfig.app.json` — adicionar `"ignoreDeprecations": "6.0"` para silenciar warning do `baseUrl`
+- [ ] Gerar types/api.ts via openapi-typescript a partir de /openapi.json — elimina de vez divergências de tipo entre backend e frontend (causa raiz da cadeia de bugs name/full_name desta sessão). Recomendado fazer antes da Fase 3 (deploy), não durante a 2B.
+- [ ] Decidir sobre hooks/useAuth.ts vazio — remover ou implementar como wrapper de useAuthStore
+- [ ] order_number como INTEGER no banco (atual é VARCHAR)
+- [ ] assigned_to no schema → renomear para technician_id para consistência
+- [ ] Avaliar soft delete (deleted_at) vs is_active
+- [ ] Avaliar RefreshToken model para blacklist
+- [ ] Avaliar Checklist/ChecklistItem model (fase 2)
+- [ ] Avaliar computed_field no config.py para DATABASE_URL automático
+- [ ] components.json — trocar "style": "radix-nova" por "style": "default" para evitar bug de instalação de componentes na pasta @
+- [ ] tsconfig.app.json — adicionar "ignoreDeprecations": "6.0" para silenciar warning do baseUrl
 - [ ] Técnico autônomo: documentar no onboarding que deve se cadastrar como owner, sugerindo placeholder "Ex: João Silva Refrigeração" no campo empresa
