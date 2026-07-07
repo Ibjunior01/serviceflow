@@ -1,8 +1,8 @@
 # ServiceFlow — Project Continuity Document
 
 ## Sessão Atual
-**Fase:** 2B — Polimento de UX + Preparação para Deploy
-**Status:** Bug `name`/`full_name` resolvido e testado E2E. Próximo: skeleton loading.
+**Fase:** 3 — Preparação para Deploy (Backend + Frontend)
+**Status:** Fase 2B concluída integralmente (skeleton loading, empty states, limpeza de debug). Início da Fase 3: preparar backend e frontend para produção (Hetzner VPS + Vercel).
 
 ## Progresso das Fases
 
@@ -16,7 +16,8 @@
 | 1F | Endpoints REST /api/v1 | ✅ Concluída |
 | 1G | Testes Automatizados pytest + httpx | ✅ Concluída |
 | 2A | Frontend React + Vite + Tailwind — todas as telas | ✅ Concluída |
-| 2B | Polimento de UX + Preparação para Deploy | ⏳ Em andamento |
+| 2B | Polimento de UX + Preparação para Deploy | ✅ Concluída |
+| 3  | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento |
 
 ## Decisões de Arquitetura Tomadas
 - Async engine (asyncpg) para performance sob carga
@@ -73,12 +74,13 @@
 ## Decisões de Frontend (Fase 2A + 2B)
 - shadcn/ui com preset `radix-nova` — componentes instalados em `src/components/ui/`
 - Atenção: shadcn com `radix-nova` cria pasta física `@` na raiz em vez de usar `src/` — ao adicionar novos componentes, copiar manualmente para `src/components/ui/` ou trocar `"style": "default"` no `components.json`
+- Confirmado: a pasta real do projeto é `src/components/` (inglês), não `src/componentes/` — o alias `@` no import (`@/components/ui/...`) é resolvido via `vite.config.ts`/`tsconfig.json`, não corresponde a uma pasta física chamada `@`
 - `sonner` para notificações toast — importar `toast` de `'sonner'`, usar `toast.success()` / `toast.error()`
 - `useToast` do shadcn NÃO existe no projeto — não usar
 - `<Toaster richColors position="top-right" />` montado no `main.tsx`
 - Axios client em `src/api/client.ts` — importar como `@/api/client` (não `@/lib/api`)
 - `useAuthStore` em `src/store/authStore.ts` — expõe `user`, `setUser`, `setTokens`, `logout`
-- TanStack Query v5: `isPending` (não `isLoading`) nas mutations
+- TanStack Query v5: `isPending` (não `isLoading`) nas mutations; `isLoading` continua correto para queries
 - Hooks de dados em `src/hooks/` — padrão: um arquivo por entidade
 - `null` vindo da API não é atribuível a `string | undefined` — converter com `?? undefined` ao passar para forms
 - `react-hook-form` + `zod` + `@hookform/resolvers` instalados para validação de formulários
@@ -95,9 +97,10 @@
 - Bug corrigido: `toast.error(msg)` explodia quando `detail` era array Pydantic v2 — tratar com `Array.isArray`
 - Técnico autônomo deve se cadastrar como `owner` — fluxo natural do registro já garante isso
 - `POST /api/v1/orders` permanece `AdminOnly` — técnico autônomo opera como owner
-- `Header.tsx` não existe fisicamente apesar de estar listado no PROJECT.md como concluído — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
-- `src/types/api.ts` está vazio apesar de listado como concluído — cada arquivo (`authStore.ts`, `api/auth.ts`, hooks) define seus próprios tipos de forma independente, causa raiz da cadeia de bugs abaixo
+- `Header.tsx` não existe fisicamente — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
+- `src/types/api.ts` está vazio — cada arquivo (`authStore.ts`, `api/auth.ts`, hooks) define seus próprios tipos de forma independente, causa raiz da cadeia de bugs `name`/`full_name`. **Pendente antes do deploy** (ver Decisões Pendentes da Fase 3).
 - `hooks/useAuth.ts` está vazio e não é importado em lugar nenhum — código morto do scaffold da Fase 2A, nunca implementado
+- **`OrdersPage.tsx` é estruturalmente diferente das outras páginas**: usa `<table>` HTML pura com estilos inline (`style={{...}}`), não os componentes shadcn `<Table>/<TableBody>/<TableRow>` usados em `UsersPage.tsx` e `CustomersPage.tsx` — dívida técnica documentada, não urgente
 
 ## Bugs corrigidos na sessão de 2B.2 (cadeia name vs full_name)
 Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend).
@@ -117,12 +120,49 @@ Confirmado como correto / falso positivo (campo `name` é o certo para essas ent
 Verificado via teste E2E, mas vale re-observar no futuro:
 - `src/pages/OrdersPage.tsx:86` — `options: { id: string; name: string }[]` no dropdown de atribuição de técnico. Passou no teste manual (nomes aparecem certos), mas não houve acesso ao código-fonte completo dessa linha para confirmar 100% a origem do `name` — se algum técnico aparecer sem nome no dropdown futuramente, checar aqui primeiro.
 
-Testes E2E realizados e aprovados nesta sessão:
+Testes E2E realizados e aprovados na sessão 2B.2:
 1. Login sem F5 → nome e iniciais aparecem corretos na Sidebar imediatamente
 2. Verificação do objeto `user` no estado do authStore → `full_name` presente e correto
 3. F5 após login → nome permanece correto (sem regressão de hidratação)
 4. Dropdown de técnico no OrdersPage → nomes aparecem corretos
 5. Edição de perfil (SettingsPage) → salva e persiste `full_name` corretamente
+
+## Skeleton Loading — Implementado e validado (sessão 2B.3)
+
+**Componentes criados:**
+- `src/components/ui/table-skeleton.tsx` — componente reutilizável `<TableSkeleton rows={N} columns={N} />`, usado em páginas com componentes shadcn `<Table>`. Retorna seu próprio `<TableBody>` internamente — nunca aninhar dentro de outro `<TableBody>`.
+- `OrdersPage.tsx` não usa `TableSkeleton` (ver nota estrutural acima) — usa o componente `Skeleton` do shadcn diretamente dentro de um `<table>` HTML pura com `<thead>` real e 8 linhas × 7 colunas de barras animadas.
+
+**Padrão aplicado por página:**
+- `UsersPage.tsx`: `{isLoading ? <TableSkeleton rows={5} columns={columnCount} /> : <TableBody>{...}</TableBody>}`, onde `columnCount = isOwner ? 5 : 4`
+- `CustomersPage.tsx`: mesmo padrão, com 3 estados (`isLoading` → skeleton; `customers.length === 0` → empty state; senão → dados), `columns={isAdmin ? 5 : 4}`
+- `OrdersPage.tsx`: `<table>` de skeleton com cabeçalho real (Nº, Título, Cliente, Técnico, Prioridade, Status, Data); import `Skeleton` de `@/components/ui/skeleton`
+
+**Validação realizada:**
+- Skeleton confirmado renderizando corretamente via vídeo de teste na tela de Usuários (barras animadas visíveis antes dos dados reais aparecerem)
+- CustomersPage e OrdersPage com código revisado linha a linha, estruturalmente equivalentes ao padrão validado
+- Prints de rede (Network tab, throttle Slow 4G) confirmam carregamento bem-sucedido sem erros de console em Users e Orders
+- Metodologia de teste validada: throttle "Slow 4G" no DevTools é suficiente e mais previsível que "3G"
+- Para testes futuros de loading state: ativar o throttle **depois** que o app já montou, ou usar "Screenshots" do painel Network
+
+## Empty States — Implementado e validado (sessão 2B.4)
+
+**Padrão aplicado (título + descrição + botão condicional por permissão):**
+- `OrdersPage.tsx` — já existia desde a criação da tela; mensagem contextual (filtro ativo vs sem OS) + botão "Criar OS →"; botão oculto quando há filtro de status ativo (o problema é o filtro, não a ausência de dados)
+- `CustomersPage.tsx` — mensagem contextual já existia (busca vs cadastro vazio); adicionado botão "Novo Cliente" via `openCreate`, visível apenas quando `isAdmin && !search`
+- `UsersPage.tsx` — criado do zero: `TableBody` reestruturado com ternário `users.length === 0 ? (empty state) : users.map(...)`; botão "Novo Usuário" visível apenas quando `isAdmin`; usa `colSpan={columnCount}`
+
+**Testes realizados:**
+- CustomersPage e OrdersPage: validado via busca/filtro sem resultados (cenário real)
+- UsersPage: validado via mock temporário (`const users: AppUser[] = []`) — confirmado visualmente que mensagem e botão aparecem para admin/owner; reversão do mock confirmada antes de prosseguir
+- Pendente (não bloqueante): testar UsersPage com um usuário técnico logado, para confirmar que o botão "Novo Usuário" some corretamente nesse caso
+
+## Limpeza de Debug (sessão 2B.4)
+- Removidos os 3 `console.log` de debug em `OrdersPage.tsx`:
+  - `CustomSelect`: `console.log('CustomSelect options:', options)`
+  - `CreateOrderModal`: `console.log('items:', usersData?.items)`
+  - `CreateOrderModal`: `console.log('technicians após filtro:', technicians)`
+- Recomendado (não executado ainda): rodar busca `Select-String -Path "src\**\*.tsx" -Pattern "console.log" -Recurse` para confirmar que não restam outros logs esquecidos no projeto
 
 ## Stack Técnica
 - **Backend:** FastAPI + Python 3.14
@@ -198,15 +238,16 @@ serviceflow/
     ├── src/
     │   ├── api/
     │   │   ├── client.ts                           OK (axios + interceptor JWT)
-    │   │   ├── auth.ts                             OK (full_name corrigido nesta sessão)
+    │   │   ├── auth.ts                             OK (full_name corrigido)
     │   │   ├── customers.ts                        OK
     │   │   ├── orders.ts                           OK (create, update, delete adicionados)
     │   │   └── users.ts                             OK
     │   ├── components/
     │   │   ├── layout/
     │   │   │   ├── AppLayout.tsx                   OK
-    │   │   │   └── Sidebar.tsx                     OK (full_name corrigido nesta sessão; Header.tsx não existe, funcionalidade está aqui)
+    │   │   │   └── Sidebar.tsx                     OK (full_name corrigido; Header.tsx não existe, funcionalidade está aqui)
     │   │   └── ui/                                  OK (shadcn/ui components)
+    │   │       └── table-skeleton.tsx               OK (componente reutilizável de skeleton)
     │   ├── hooks/
     │   │   ├── useAuth.ts                          VAZIO — código morto, não importado em lugar nenhum
     │   │   ├── useCompany.ts                       OK
@@ -216,17 +257,17 @@ serviceflow/
     │   ├── pages/
     │   │   ├── LoginPage.tsx                       OK
     │   │   ├── DashboardPage.tsx                   OK
-    │   │   ├── OrdersPage.tsx                      OK (verificar linha 86 — ver seção de bugs)
+    │   │   ├── OrdersPage.tsx                      OK (skeleton loading, empty state e console.log de debug removidos; tabela HTML pura, não shadcn — dívida técnica)
     │   │   ├── OrderDetailPage.tsx                 OK
-    │   │   ├── CustomersPage.tsx                   OK
-    │   │   ├── UsersPage.tsx                       OK (NewUserForm correto)
+    │   │   ├── CustomersPage.tsx                   OK (skeleton loading + empty state com botão de ação, ambos validados)
+    │   │   ├── UsersPage.tsx                       OK (skeleton loading + empty state com botão de ação, ambos validados)
     │   │   └── SettingsPage.tsx                    OK (form de perfil testado, salva full_name corretamente)
     │   ├── router/
     │   │   └── index.tsx                           OK (ProtectedRoute via accessToken, reativo, sem bugs)
     │   ├── store/
-    │   │   └── authStore.ts                        OK (full_name corrigido nesta sessão)
+    │   │   └── authStore.ts                        OK (full_name corrigido)
     │   ├── types/
-    │   │   └── api.ts                              VAZIO — causa raiz da cadeia de bugs desta sessão
+    │   │   └── api.ts                              VAZIO — gerar via openapi-typescript antes do deploy (Fase 3, prioridade alta)
     │   └── main.tsx                                 OK (Toaster montado)
     ├── index.html
     ├── vite.config.ts
@@ -300,7 +341,7 @@ serviceflow/
 - SettingsPage — dados da empresa, perfil do usuário, assinatura
 - Sonner montado no main.tsx
 
-## Fase 2B — Progresso atual
+## Fase 2B — Concluída
 - [x] Formulário de criação de OS na OrdersPage com modal + react-hook-form + zod
 - [x] Validação de formulários com react-hook-form + zod
 - [x] Confirmar que todas as telas funcionam com backend rodando (validação E2E completa)
@@ -309,23 +350,32 @@ serviceflow/
 - [x] Correção enum priority: normal em vez de medium
 - [x] Correção campo usuário: full_name em vez de name
 - [x] Correção validator documento cliente: aceitar string vazia como None
-- [x] authStore atualiza user corretamente após login, sem F5 — resolvido e testado nesta sessão (2B.2)
-- [ ] Skeleton loading nas tabelas (substituir "Carregando..." por UI real) — próximo passo
-- [ ] Empty states com botão de ação direto
+- [x] authStore atualiza user corretamente após login, sem F5 (sessão 2B.2)
+- [x] Skeleton loading nas tabelas — 3 páginas (Users, Customers, Orders) (sessão 2B.3)
+- [x] Empty states com botão de ação direto — 3 páginas (sessão 2B.4)
+- [x] Remover os 3 console.log de debug em CreateOrderModal (OrdersPage.tsx) (sessão 2B.4)
 
-## Deploy target
-- Frontend: Vercel
-- Backend: Hetzner VPS (Fase 3)
+## Fase 3 — Preparação para Deploy (em andamento)
+- [ ] Gerar `types/api.ts` via `openapi-typescript` a partir de `/openapi.json` — prioridade alta, elimina a causa raiz da cadeia de bugs name/full_name antes de ir para produção
+- [ ] Decidir sobre `hooks/useAuth.ts` vazio — remover ou implementar como wrapper de `useAuthStore`
+- [ ] `order_number` como `INTEGER` no banco (atual é `VARCHAR`) — migration Alembic
+- [ ] `assigned_to` no schema → renomear para `technician_id` para consistência
+- [ ] `components.json` — trocar `"style": "radix-nova"` por `"style": "default"` para evitar bug de instalação de componentes na pasta `@`
+- [ ] `tsconfig.app.json` — adicionar `"ignoreDeprecations": "6.0"` para silenciar warning do baseUrl
+- [ ] Variáveis de ambiente de produção — backend (Hetzner) e frontend (Vercel): `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, URL da API pública
+- [ ] Configurar CORS no FastAPI para o domínio de produção do frontend (Vercel)
+- [ ] Dockerfile de produção do backend — revisar se o `Dockerfile` atual (dev) precisa de ajustes para deploy (multi-stage build, non-root user, etc.)
+- [ ] Rodar migrations Alembic em produção (estratégia: manual no primeiro deploy vs. automatizado via CI/CD)
+- [ ] Build de produção do frontend (`npm run build`) — validar localmente antes do primeiro deploy no Vercel
+- [ ] Decidir sobre HTTPS/domínio próprio (Hetzner VPS geralmente exige configuração manual de reverse proxy — Nginx ou Caddy — + certificado TLS)
+- [ ] Rodar suíte de testes pytest (68/68) uma última vez antes do primeiro deploy, como checkpoint de regressão
 
-## Decisões Pendentes / A Revisar
-- [ ] Gerar types/api.ts via openapi-typescript a partir de /openapi.json — elimina de vez divergências de tipo entre backend e frontend (causa raiz da cadeia de bugs name/full_name desta sessão). Recomendado fazer antes da Fase 3 (deploy), não durante a 2B.
-- [ ] Decidir sobre hooks/useAuth.ts vazio — remover ou implementar como wrapper de useAuthStore
-- [ ] order_number como INTEGER no banco (atual é VARCHAR)
-- [ ] assigned_to no schema → renomear para technician_id para consistência
+## Decisões Pendentes / A Revisar (baixa prioridade, pós-deploy)
 - [ ] Avaliar soft delete (deleted_at) vs is_active
 - [ ] Avaliar RefreshToken model para blacklist
-- [ ] Avaliar Checklist/ChecklistItem model (fase 2)
+- [ ] Avaliar Checklist/ChecklistItem model (fase futura)
 - [ ] Avaliar computed_field no config.py para DATABASE_URL automático
-- [ ] components.json — trocar "style": "radix-nova" por "style": "default" para evitar bug de instalação de componentes na pasta @
-- [ ] tsconfig.app.json — adicionar "ignoreDeprecations": "6.0" para silenciar warning do baseUrl
 - [ ] Técnico autônomo: documentar no onboarding que deve se cadastrar como owner, sugerindo placeholder "Ex: João Silva Refrigeração" no campo empresa
+- [ ] Considerar refatorar `OrdersPage.tsx` para usar componentes shadcn `<Table>` (como Users/Customers) em vez de `<table>` HTML pura com estilos inline — dívida técnica de consistência, não bloqueante para deploy
+- [ ] Rodar `Select-String -Path "src\**\*.tsx" -Pattern "console.log" -Recurse` para confirmar ausência de outros logs de debug esquecidos no projeto
+- [ ] Testar UsersPage com usuário técnico logado, para confirmar que botão "Novo Usuário" some corretamente (empty state)

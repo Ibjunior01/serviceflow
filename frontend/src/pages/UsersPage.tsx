@@ -162,7 +162,24 @@ export default function UsersPage() {
                         <TableSkeleton rows={5} columns={columnCount} />
                     ) : (
                         <TableBody>
-                            {users.map((u) => (
+                            {users.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={columnCount} className="text-center py-10">
+                                        <p className="text-sm font-medium text-foreground mb-1">
+                                            Nenhum usuário cadastrado
+                                        </p>
+                                        <p className="text-sm text-muted-foreground mb-4">
+                                            Adicione o primeiro membro da equipe para começar.
+                                        </p>
+                                        {isAdmin && (
+                                            <Button size="sm" onClick={() => setDialogOpen(true)}>
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Novo Usuário
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ) : users.map((u) => (
                                 <TableRow key={u.id} className={u.id === me?.id ? 'bg-muted/30' : ''}>
                                     <TableCell className="font-medium">
                                         {u.full_name}

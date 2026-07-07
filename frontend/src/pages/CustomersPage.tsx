@@ -223,8 +223,19 @@ export default function CustomersPage() {
                         <TableBody>
                             {customers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-10 text-muted-foreground">
-                                        {search ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado ainda.'}
+                                    <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-10">
+                                        <p className="text-sm font-medium text-foreground mb-1">
+                                            {search ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground mb-4">
+                                            {search ? 'Tente outro termo de busca.' : 'Cadastre o primeiro cliente para começar.'}
+                                        </p>
+                                        {!search && isAdmin && (
+                                            <Button size="sm" onClick={openCreate}>
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Novo Cliente
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ) : customers.map((c) => (

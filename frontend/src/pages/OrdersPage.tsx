@@ -93,8 +93,6 @@ function CustomSelect({
     const [open, setOpen] = useState(false)
     const selected = options.find((o) => o.id === value)
 
-    console.log('CustomSelect options:', options)
-
     return (
         <div style={{ position: 'relative' }}>
             <button
@@ -190,8 +188,6 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
             (u: any) => ['technician', 'admin', 'owner'].includes(u.role)
         )
         : []
-    console.log('items:', usersData?.items)
-    console.log('technicians após filtro:', technicians)
 
     const {
         register,
