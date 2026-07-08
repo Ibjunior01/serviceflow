@@ -1,23 +1,11 @@
 import { api } from './client'
+import type { AuthResponse, LoginRequest, User } from '@/types'
 
-export interface LoginPayload {
-  email: string
-  password: string
-}
+/** @deprecated use `LoginRequest` from '@/types' */
+export type LoginPayload = LoginRequest
 
-export interface AuthResponse {
-  access_token: string
-  refresh_token: string
-  token_type: string
-}
-
-export interface MeResponse {
-  id: string
-  full_name: string
-  email: string
-  role: 'owner' | 'admin' | 'technician' | 'viewer'
-  company_id: string
-}
+/** @deprecated use `User` from '@/types' */
+export type MeResponse = User
 
 export const authApi = {
   login: (data: LoginPayload) =>

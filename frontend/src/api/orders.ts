@@ -53,7 +53,7 @@ export interface ServiceOrderCreate {
     description?: string
     priority: 'low' | 'normal' | 'high' | 'urgent'
     customer_id?: string
-    assigned_to?: string        // backend usa assigned_to → technician_id
+    technician_id?: string
     scheduled_at?: string       // ISO string ou undefined
 }
 
@@ -62,7 +62,7 @@ export interface ServiceOrderUpdate {
     description?: string
     priority?: 'low' | 'normal' | 'high' | 'urgent'
     customer_id?: string
-    assigned_to?: string
+    technician_id?: string
     scheduled_at?: string
 }
 

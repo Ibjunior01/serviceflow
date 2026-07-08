@@ -20,7 +20,7 @@ class TestCreateOrder:
             json={
                 "title": "Instalação Ar Condicionado",
                 "customer_id": sample_customer["id"],
-                "assigned_to": tech_id,
+                "technician_id": tech_id,
                 "priority": "normal",
             },
             headers=admin_headers,
@@ -132,7 +132,7 @@ class TestDeleteOrder:
             json={
                 "title": "OS para deletar",
                 "customer_id": sample_customer["id"],
-                "assigned_to": tech_id,
+                "technician_id": tech_id,
             },
             headers=admin_headers,
         )
@@ -183,7 +183,7 @@ class TestStatusMachine:
             json={
                 "title": "OS Happy Path",
                 "customer_id": sample_customer["id"],
-                "assigned_to": tech_id,
+                "technician_id": tech_id,
             },
             headers=admin_headers,
         )
@@ -245,7 +245,7 @@ class TestStatusMachine:
             json={
                 "title": "OS Cancelada",
                 "customer_id": sample_customer["id"],
-                "assigned_to": tech_id,
+                "technician_id": tech_id,
             },
             headers=admin_headers,
         )

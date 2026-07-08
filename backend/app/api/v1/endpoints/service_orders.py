@@ -65,7 +65,7 @@ async def get_order(
         company_id=order.company_id,
         customer_id=order.customer_id,
         customer_name=order.customer.name if order.customer else None,
-        assigned_to=order.technician_id,
+        technician_id=order.technician_id,
         technician_name=order.technician.full_name if order.technician else None,
         title=order.title,
         description=order.description,

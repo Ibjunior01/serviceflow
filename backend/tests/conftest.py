@@ -165,7 +165,7 @@ async def sample_order(async_client, admin_headers, sample_customer, tech_tokens
             "title": "Manutencao Split 12.000 BTU",
             "description": "Limpeza e recarga de gas",
             "customer_id": sample_customer["id"],
-            "assigned_to": tech_id,
+            "technician_id": tech_id,
             "priority": "high",
         },
         headers=admin_headers,

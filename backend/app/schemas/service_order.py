@@ -29,7 +29,7 @@ class ServiceOrderBase(BaseSchema):
     priority: OrderPriority = Field(default=OrderPriority.NORMAL)
     scheduled_at: Optional[datetime] = None
     customer_id: UUID
-    assigned_to: Optional[UUID] = None
+    technician_id: Optional[UUID] = None
     location_address: Optional[str] = Field(default=None, max_length=500)
     location_reference: Optional[str] = Field(default=None, max_length=255)
     equipment_type: Optional[str] = Field(default=None, max_length=100)
@@ -48,7 +48,7 @@ class ServiceOrderUpdate(BaseSchema):
     description: Optional[str] = Field(default=None, max_length=2000)
     priority: Optional[OrderPriority] = None
     scheduled_at: Optional[datetime] = None
-    assigned_to: Optional[UUID] = None
+    technician_id: Optional[UUID] = None
     location_address: Optional[str] = Field(default=None, max_length=500)
     location_reference: Optional[str] = Field(default=None, max_length=255)
     equipment_type: Optional[str] = Field(default=None, max_length=100)

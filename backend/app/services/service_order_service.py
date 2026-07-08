@@ -84,7 +84,7 @@ class ServiceOrderService:
             obj_in={
                 "company_id": company_id,
                 "customer_id": data.customer_id,
-                "technician_id": data.assigned_to,
+                "technician_id": data.technician_id,
                 "title": data.title,
                 "description": data.description,
                 "priority": data.priority if data.priority else "normal",

@@ -1,14 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { User } from '@/types'
 
-
-export interface AuthUser {
-  id: string
-  full_name: string
-  email: string
-  role: 'owner' | 'admin' | 'technician' | 'viewer'
-  company_id: string
-}
+/** @deprecated use `User` from '@/types' — mantido como alias para compatibilidade */
+export type AuthUser = User
 
 interface AuthState {
   accessToken: string | null

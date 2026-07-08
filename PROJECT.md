@@ -2,7 +2,7 @@
 
 ## Sessão Atual
 **Fase:** 3 — Preparação para Deploy (Backend + Frontend)
-**Status:** Fase 2B concluída integralmente (skeleton loading, empty states, limpeza de debug). Início da Fase 3: preparar backend e frontend para produção (Hetzner VPS + Vercel).
+**Status:** `types/api.ts` gerado e integrado; renomeação `assigned_to` → `technician_id` concluída em backend e frontend, com suíte de testes validada (68/68). Próximos itens: migration `order_number`, `docker-compose.prod.yml` + Caddyfile, CORS de produção, teste mobile via Cloudflare Tunnel.
 
 ## Progresso das Fases
 
@@ -62,7 +62,7 @@
 - Apenas DRAFT pode ser excluída
 - Apenas OWNER pode alterar roles
 - Campos do model `Customer` detalhados (`address_street`, `address_number`, etc.)
-- `assigned_to` no schema de OS mapeia para `technician_id` no model
+- `technician_id` é o nome único do campo em todas as camadas (model, schema, service, endpoint, frontend) — ver seção "Renomeação assigned_to → technician_id" abaixo. **`assigned_to` não existe mais em lugar nenhum do projeto.**
 - Testes usam `drop_all/create_all` por teste (sem rollback/truncate — incompatível com asyncpg no Windows)
 - `asyncio_default_fixture_loop_scope = function` no pytest.ini (obrigatório para Windows + pytest-asyncio 0.24)
 - Login via JSON `{"email": ..., "password": ...}` (não OAuth2 form-data)
@@ -73,7 +73,7 @@
 
 ## Decisões de Frontend (Fase 2A + 2B)
 - shadcn/ui com preset `radix-nova` — componentes instalados em `src/components/ui/`
-- Atenção: shadcn com `radix-nova` cria pasta física `@` na raiz em vez de usar `src/` — ao adicionar novos componentes, copiar manualmente para `src/components/ui/` ou trocar `"style": "default"` no `components.json`
+- Atenção: shadcn com `radix-nova` cria pasta física `@` na raiz em vez de usar `src/` — ao adicionar novos componentes, copiar manualmente para `src/components/ui/` ou trocar `"style": "default"` no `components.json`. **Ainda pendente de aplicar (ver Fase 3).**
 - Confirmado: a pasta real do projeto é `src/components/` (inglês), não `src/componentes/` — o alias `@` no import (`@/components/ui/...`) é resolvido via `vite.config.ts`/`tsconfig.json`, não corresponde a uma pasta física chamada `@`
 - `sonner` para notificações toast — importar `toast` de `'sonner'`, usar `toast.success()` / `toast.error()`
 - `useToast` do shadcn NÃO existe no projeto — não usar
@@ -85,29 +85,76 @@
 - `null` vindo da API não é atribuível a `string | undefined` — converter com `?? undefined` ao passar para forms
 - `react-hook-form` + `zod` + `@hookform/resolvers` instalados para validação de formulários
 - Enum `priority` no backend usa `normal` (não `medium`) — mapear `normal` → "Média" no frontend
-- Campo de nome de usuário na API é `full_name` (não `name`) — ver seção de bugs abaixo, esse padrão se repetiu em 4 arquivos diferentes
+- Campo de nome de usuário na API é `full_name` (não `name`) — cadeia de bugs já corrigida (ver sessão 2B.2)
 - `<select>` nativo no Chrome/Windows ignora `style` em `<option>` — usar componente `CustomSelect` com dropdown feito em JSX para casos onde cor/estilo importa
-- `CustomSelect` controlado via `useState` local — não registrar no react-hook-form via `register()`, incluir valor manualmente no payload do `onSubmit`
+- `CustomSelect` controlado via `useState` local (`assignedTo`) — não registrado no react-hook-form via `register()`; valor incluído manualmente no payload do `onSubmit` como `technician_id`
 - Guard de permissão `canCreate`/`canAssign` baseado em `useAuthStore` para esconder ações por role
 - Queries com `enabled: canAssign` evitam chamadas 403 desnecessárias para endpoints AdminOnly
 - Dropdown do `CustomSelect` abre para cima (`bottom: calc(100% + 4px)`) para evitar corte pelo modal
-- Bug corrigido: `assigned_to` não entrava no payload — `CustomSelect` usa `useState`, não RHF
 - Bug corrigido: `document: ""` rejeitado pelo validator Pydantic — usar `not v` em vez de `v is None`
 - Bug corrigido: query de usuários duplicada no `CreateOrderModal` causava erro de compilação
 - Bug corrigido: `toast.error(msg)` explodia quando `detail` era array Pydantic v2 — tratar com `Array.isArray`
 - Técnico autônomo deve se cadastrar como `owner` — fluxo natural do registro já garante isso
 - `POST /api/v1/orders` permanece `AdminOnly` — técnico autônomo opera como owner
 - `Header.tsx` não existe fisicamente — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
-- `src/types/api.ts` está vazio — cada arquivo (`authStore.ts`, `api/auth.ts`, hooks) define seus próprios tipos de forma independente, causa raiz da cadeia de bugs `name`/`full_name`. **Pendente antes do deploy** (ver Decisões Pendentes da Fase 3).
-- `hooks/useAuth.ts` está vazio e não é importado em lugar nenhum — código morto do scaffold da Fase 2A, nunca implementado
+- `hooks/useAuth.ts` está vazio e não é importado em lugar nenhum — código morto do scaffold da Fase 2A, nunca implementado. **Decisão pendente: remover ou implementar (Fase 3).**
 - **`OrdersPage.tsx` é estruturalmente diferente das outras páginas**: usa `<table>` HTML pura com estilos inline (`style={{...}}`), não os componentes shadcn `<Table>/<TableBody>/<TableRow>` usados em `UsersPage.tsx` e `CustomersPage.tsx` — dívida técnica documentada, não urgente
 
+## Tipos da API — geração automática via openapi-typescript (sessão Fase 3.1)
+
+**Problema resolvido:** `src/types/api.ts` estava vazio, causando divergência de tipos entre arquivos (causa raiz da cadeia de bugs `name`/`full_name` da sessão 2B.2).
+
+**Solução implementada:**
+- Instalado `openapi-typescript@7.13.0` como devDependency (via `--legacy-peer-deps`, necessário porque o pacote declara peer `typescript@^5.x` mas o projeto usa `typescript@6.0.3` — conflito inofensivo, pacote só faz parsing/geração de texto)
+- Script adicionado ao `package.json`: `"generate-types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts"`
+- **Pré-requisito para rodar:** backend precisa estar ativo em `localhost:8000` (`uvicorn app.main:app --reload` ou Docker) — sem isso, o comando falha com `ECONNREFUSED`
+- `src/types/api.ts` agora é gerado automaticamente a partir do `/openapi.json` real do FastAPI — nunca editar manualmente
+- Criado `src/types/index.ts` com re-exports simplificados (`User`, `AuthResponse`, `ServiceOrder`, `Customer`, `PaginatedUsers`, etc.) apontando para `components['schemas'][...]` do arquivo gerado, evitando imports verbosos no resto do código
+
+**Refatoração aplicada (com aliases para não quebrar imports existentes):**
+- `src/store/authStore.ts` — `AuthUser` agora é `export type AuthUser = User` (alias do tipo gerado)
+- `src/api/auth.ts` — `MeResponse` agora é alias de `User`; `LoginPayload` agora é alias de `LoginRequest`; `AuthResponse` importado do tipo gerado (revelou que o backend já retorna o `user` completo na resposta de login — oportunidade futura de eliminar uma chamada extra a `/auth/me` após login, não implementada ainda)
+- `src/components/layout/Sidebar.tsx` — nenhuma mudança necessária, já estava correto
+
+**Validação:**
+- `npx tsc --noEmit` limpo
+- `npm run build` (tsc -b && vite build) limpo após dois ajustes adicionais:
+  - `tsconfig.app.json`: adicionado `"ignoreDeprecations": "6.0"` (warning TS5101 sobre `baseUrl`)
+  - `src/main.tsx`: removido `import React from 'react'` não utilizado (TS6133, desnecessário com o JSX transform novo do React 18/Vite)
+- Bundle de produção gerado: `dist/assets/index-*.js` ~686 kB (211 kB gzip) — aviso do Vite sobre chunk > 500kB, não bloqueante; code-splitting por rota (`React.lazy`) considerado como otimização futura, não urgente
+
+## Renomeação `assigned_to` → `technician_id` (sessão Fase 3.2)
+
+**Motivação:** consistência de nome em todas as camadas (o model SQLAlchemy sempre usou `technician_id`; só os schemas Pydantic de entrada usavam `assigned_to`, exigindo tradução manual).
+
+**Bug latente descoberto e corrigido:** no método `update()` de `service_order_service.py`, o payload é montado via `data.model_dump(exclude_unset=True)` passado direto ao repository — sem tradução manual do nome do campo (diferente do `create()`, que tinha uma linha explícita `"technician_id": data.assigned_to`). Isso significa que **atualizar o técnico responsável de uma OS já existente via `PATCH /orders/{id}` provavelmente nunca funcionou corretamente** antes desta correção — o dict chegava ao repo com a chave `assigned_to`, que o model não reconhece. Não havia teste E2E cobrindo esse caminho específico, por isso passou despercebido. Corrigido automaticamente ao renomear o schema (o `model_dump()` agora gera a chave certa sem tradução).
+
+**Arquivos alterados — Backend:**
+- `app/schemas/service_order.py` — `assigned_to: Optional[UUID] = None` → `technician_id: Optional[UUID] = None` em `ServiceOrderBase` e `ServiceOrderUpdate`
+- `app/services/service_order_service.py` — método `create()`: `"technician_id": data.assigned_to` → `"technician_id": data.technician_id`
+- `app/api/v1/endpoints/service_orders.py` — endpoint `get_order()`: construção manual de `ServiceOrderResponse(...)` tinha `assigned_to=order.technician_id` como nome de argumento → corrigido para `technician_id=order.technician_id`. **Nota:** esse é o único endpoint que constrói a resposta campo a campo manualmente (por causa de dados combinados de relacionamentos como `customer.name`/`technician.full_name`); `create_order` e `update_order` retornam o objeto do banco direto e o FastAPI serializa via `response_model` automaticamente — candidato a refatoração futura para reduzir esse tipo de risco.
+- `tests/test_service_orders.py` — 4 ocorrências de `"assigned_to": tech_id` → `"technician_id": tech_id` (linhas originais 23, 135, 186, 248)
+- `tests/conftest.py` — 1 ocorrência de `"assigned_to": tech_id` → `"technician_id": tech_id` (linha original 168)
+
+**Arquivos alterados — Frontend:**
+- `src/api/orders.ts` — interfaces `ServiceOrderCreate` e `ServiceOrderUpdate`: `assigned_to?: string` → `technician_id?: string` (comentário obsoleto removido)
+- `src/pages/OrdersPage.tsx`:
+  - Removido campo morto `assigned_to: z.string().optional()` do `createOrderSchema` (Zod) — esse campo nunca era preenchido pelo react-hook-form, já que o `CustomSelect` de técnico é controlado via `useState` (`assignedTo`) separado; o valor real sempre veio da variável de state, não de `values.assigned_to`
+  - Payload de `onSubmit`: `assigned_to: assignedTo || undefined` → `technician_id: assignedTo || undefined`
+
+**Validação:**
+- `python -m pytest -v` (de dentro de `backend/`): **68 passed**, 0 failed
+- `npx tsc --noEmit` e `npm run build`: limpos
+- Busca final confirmando erradicação completa: `Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Select-String -Pattern "assigned_to"` retorna vazio
+
+**Nota de processo (PowerShell no Windows):** `Select-String` não possui parâmetro `-Recurse` — usar `Get-ChildItem -Path <pasta> -Recurse -Include *.ext | Select-String -Pattern "..."` para buscas recursivas de texto em múltiplos arquivos.
+
 ## Bugs corrigidos na sessão de 2B.2 (cadeia name vs full_name)
-Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend).
+Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend). **Causa raiz eliminada na Fase 3.1** (ver seção acima) — `types/api.ts` agora é gerado automaticamente e nunca mais diverge manualmente.
 
 Corrigidos:
 - `src/store/authStore.ts` — `AuthUser.name` trocado para `AuthUser.full_name`
-- `src/api/auth.ts` — `MeResponse.name` trocado para `MeResponse.full_name` (linha 16)
+- `src/api/auth.ts` — `MeResponse.name` trocado para `MeResponse.full_name`
 - `src/components/layout/Sidebar.tsx` — `user?.name` trocado para `user?.full_name` (2 ocorrências: cálculo de `initials` e texto exibido no rodapé)
 
 Confirmado como correto / falso positivo (campo `name` é o certo para essas entidades, não confundir com o bug):
@@ -116,9 +163,6 @@ Confirmado como correto / falso positivo (campo `name` é o certo para essas ent
 - `src/hooks/useCustomers.ts:6,21` — Customer usa `name`
 - `src/hooks/useUsers.ts:8,16` — já usava `full_name` corretamente
 - `NewUserForm` (dentro de UsersPage) — já usava `full_name` corretamente em todo o componente
-
-Verificado via teste E2E, mas vale re-observar no futuro:
-- `src/pages/OrdersPage.tsx:86` — `options: { id: string; name: string }[]` no dropdown de atribuição de técnico. Passou no teste manual (nomes aparecem certos), mas não houve acesso ao código-fonte completo dessa linha para confirmar 100% a origem do `name` — se algum técnico aparecer sem nome no dropdown futuramente, checar aqui primeiro.
 
 Testes E2E realizados e aprovados na sessão 2B.2:
 1. Login sem F5 → nome e iniciais aparecem corretos na Sidebar imediatamente
@@ -162,7 +206,7 @@ Testes E2E realizados e aprovados na sessão 2B.2:
   - `CustomSelect`: `console.log('CustomSelect options:', options)`
   - `CreateOrderModal`: `console.log('items:', usersData?.items)`
   - `CreateOrderModal`: `console.log('technicians após filtro:', technicians)`
-- Recomendado (não executado ainda): rodar busca `Select-String -Path "src\**\*.tsx" -Pattern "console.log" -Recurse` para confirmar que não restam outros logs esquecidos no projeto
+- Recomendado (não executado ainda): rodar `Get-ChildItem -Path src -Recurse -Include *.tsx,*.ts | Select-String -Pattern "console.log"` para confirmar que não restam outros logs esquecidos no projeto
 
 ## Stack Técnica
 - **Backend:** FastAPI + Python 3.14
@@ -176,6 +220,7 @@ Testes E2E realizados e aprovados na sessão 2B.2:
 - **Banco de testes:** PostgreSQL separado via Docker (serviceflow_test)
 - **Venv:** .venv em serviceflow/ (raiz do projeto)
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
+- **Geração de tipos:** openapi-typescript 7.13.0 (`npm run generate-types`, requer backend ativo em localhost:8000)
 - **Estado global:** Zustand com persist (chave `sf-auth`)
 - **Cache/sync:** TanStack Query v5
 - **Roteamento:** React Router v6
@@ -201,7 +246,7 @@ serviceflow/
 │   │   │       ├── companies.py                   OK
 │   │   │       ├── users.py                       OK
 │   │   │       ├── customers.py                   OK
-│   │   │       └── service_orders.py              OK
+│   │   │       └── service_orders.py              OK (get_order: technician_id corrigido)
 │   │   ├── core/
 │   │   │   ├── config.py                          OK
 │   │   │   ├── security.py                        OK
@@ -212,16 +257,16 @@ serviceflow/
 │   │   │   └── base.py                            OK
 │   │   ├── models/                                OK
 │   │   ├── repositories/                          OK
-│   │   ├── schemas/                                OK
-│   │   ├── services/                               OK
+│   │   ├── schemas/                                OK (service_order.py: technician_id)
+│   │   ├── services/                               OK (service_order_service.py: technician_id, bug de update() corrigido)
 │   │   └── main.py                                 OK
-│   ├── tests/                                      OK
-│   │   ├── conftest.py                             OK
+│   ├── tests/                                      OK (68/68 passing)
+│   │   ├── conftest.py                             OK (technician_id)
 │   │   ├── test_auth.py                            OK
 │   │   ├── test_companies.py                       OK
 │   │   ├── test_users.py                           OK
 │   │   ├── test_customers.py                       OK
-│   │   └── test_service_orders.py                  OK
+│   │   └── test_service_orders.py                  OK (technician_id)
 │   ├── alembic/versions/
 │   │   ├── 06d5ab8065eb_initial_schema.py          OK
 │   │   └── xxxx_expand_customer_address_fields.py  OK
@@ -238,9 +283,9 @@ serviceflow/
     ├── src/
     │   ├── api/
     │   │   ├── client.ts                           OK (axios + interceptor JWT)
-    │   │   ├── auth.ts                             OK (full_name corrigido)
+    │   │   ├── auth.ts                             OK (tipos derivados de types/api.ts)
     │   │   ├── customers.ts                        OK
-    │   │   ├── orders.ts                           OK (create, update, delete adicionados)
+    │   │   ├── orders.ts                           OK (technician_id corrigido)
     │   │   └── users.ts                             OK
     │   ├── components/
     │   │   ├── layout/
@@ -249,7 +294,7 @@ serviceflow/
     │   │   └── ui/                                  OK (shadcn/ui components)
     │   │       └── table-skeleton.tsx               OK (componente reutilizável de skeleton)
     │   ├── hooks/
-    │   │   ├── useAuth.ts                          VAZIO — código morto, não importado em lugar nenhum
+    │   │   ├── useAuth.ts                          VAZIO — código morto, não importado em lugar nenhum. Decisão pendente (Fase 3).
     │   │   ├── useCompany.ts                       OK
     │   │   ├── useCustomers.ts                     OK
     │   │   ├── useOrders.ts                        OK
@@ -257,7 +302,7 @@ serviceflow/
     │   ├── pages/
     │   │   ├── LoginPage.tsx                       OK
     │   │   ├── DashboardPage.tsx                   OK
-    │   │   ├── OrdersPage.tsx                      OK (skeleton loading, empty state e console.log de debug removidos; tabela HTML pura, não shadcn — dívida técnica)
+    │   │   ├── OrdersPage.tsx                      OK (skeleton, empty state, debug logs, technician_id — todos resolvidos; tabela HTML pura, não shadcn — dívida técnica)
     │   │   ├── OrderDetailPage.tsx                 OK
     │   │   ├── CustomersPage.tsx                   OK (skeleton loading + empty state com botão de ação, ambos validados)
     │   │   ├── UsersPage.tsx                       OK (skeleton loading + empty state com botão de ação, ambos validados)
@@ -265,16 +310,17 @@ serviceflow/
     │   ├── router/
     │   │   └── index.tsx                           OK (ProtectedRoute via accessToken, reativo, sem bugs)
     │   ├── store/
-    │   │   └── authStore.ts                        OK (full_name corrigido)
+    │   │   └── authStore.ts                        OK (tipos derivados de types/api.ts)
     │   ├── types/
-    │   │   └── api.ts                              VAZIO — gerar via openapi-typescript antes do deploy (Fase 3, prioridade alta)
-    │   └── main.tsx                                 OK (Toaster montado)
+    │   │   ├── api.ts                              OK — gerado via `npm run generate-types` (openapi-typescript), NUNCA editar manualmente
+    │   │   └── index.ts                            OK — re-exports simplificados (User, AuthResponse, ServiceOrder, etc.)
+    │   └── main.tsx                                 OK (Toaster montado, import React não utilizado removido)
     ├── index.html
     ├── vite.config.ts
-    ├── tsconfig.app.json
+    ├── tsconfig.app.json                            OK (ignoreDeprecations: "6.0" adicionado)
     ├── tsconfig.json
-    ├── components.json
-    └── package.json
+    ├── components.json                              PENDENTE — trocar style radix-nova por default
+    └── package.json                                 OK (script generate-types adicionado)
 
 ## Endpoints Implementados (Fase 1F)
 
@@ -356,19 +402,28 @@ serviceflow/
 - [x] Remover os 3 console.log de debug em CreateOrderModal (OrdersPage.tsx) (sessão 2B.4)
 
 ## Fase 3 — Preparação para Deploy (em andamento)
-- [ ] Gerar `types/api.ts` via `openapi-typescript` a partir de `/openapi.json` — prioridade alta, elimina a causa raiz da cadeia de bugs name/full_name antes de ir para produção
+- [x] Gerar `types/api.ts` via `openapi-typescript` a partir de `/openapi.json` — concluído (sessão Fase 3.1)
+- [x] `assigned_to` no schema → renomeado para `technician_id` em todas as camadas — concluído (sessão Fase 3.2), incluindo correção de bug latente em `update()`
+- [x] `tsconfig.app.json` — `"ignoreDeprecations": "6.0"` adicionado
+- [x] Build de produção do frontend (`npm run build`) validado localmente
+- [x] Suíte de testes pytest (68/68) validada após as mudanças da sessão
 - [ ] Decidir sobre `hooks/useAuth.ts` vazio — remover ou implementar como wrapper de `useAuthStore`
-- [ ] `order_number` como `INTEGER` no banco (atual é `VARCHAR`) — migration Alembic
-- [ ] `assigned_to` no schema → renomear para `technician_id` para consistência
+- [ ] `order_number` como `INTEGER` no banco (atual é `VARCHAR`) — migration Alembic (próximo item planejado)
 - [ ] `components.json` — trocar `"style": "radix-nova"` por `"style": "default"` para evitar bug de instalação de componentes na pasta `@`
-- [ ] `tsconfig.app.json` — adicionar `"ignoreDeprecations": "6.0"` para silenciar warning do baseUrl
 - [ ] Variáveis de ambiente de produção — backend (Hetzner) e frontend (Vercel): `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, URL da API pública
 - [ ] Configurar CORS no FastAPI para o domínio de produção do frontend (Vercel)
 - [ ] Dockerfile de produção do backend — revisar se o `Dockerfile` atual (dev) precisa de ajustes para deploy (multi-stage build, non-root user, etc.)
+- [ ] Criar `docker-compose.prod.yml` + `Caddyfile` para simular ambiente de produção localmente (backend + postgres + caddy com `tls internal`)
 - [ ] Rodar migrations Alembic em produção (estratégia: manual no primeiro deploy vs. automatizado via CI/CD)
-- [ ] Build de produção do frontend (`npm run build`) — validar localmente antes do primeiro deploy no Vercel
 - [ ] Decidir sobre HTTPS/domínio próprio (Hetzner VPS geralmente exige configuração manual de reverse proxy — Nginx ou Caddy — + certificado TLS)
-- [ ] Rodar suíte de testes pytest (68/68) uma última vez antes do primeiro deploy, como checkpoint de regressão
+- [ ] Testar responsividade mobile (inputs numéricos com `inputMode="decimal"`, `CustomSelect` em telas pequenas, tabela HTML pura do OrdersPage) antes do teste com celular real
+- [ ] Expor ambiente local via Cloudflare Tunnel e testar fluxo completo (login, criar OS, inserir peças/serviços) em celular real, idealmente em Wi-Fi e 4G
+- [ ] Rodar suíte de testes pytest uma última vez antes do primeiro deploy pago no Hetzner, como checkpoint final de regressão
+
+## Decisão de Infraestrutura — Hetzner vs. gratuito
+- Vercel (frontend): gratuito no plano Hobby, suficiente para o estágio atual
+- Hetzner (backend, CX22): ~€4,51/mês, sem tier gratuito — decisão tomada de seguir com Hetzner por simplicidade e previsibilidade (alternativa gratuita considerada: Oracle Cloud Free Tier / Always Free, com setup mais trabalhoso e disponibilidade de recursos variável por região)
+- Estratégia de validação antes de pagar: simular ambiente de produção localmente via Docker Compose + Caddy (`tls internal` para HTTPS local) + Cloudflare Tunnel (exposição pública gratuita, sem limite de sessão como o ngrok free) — validado como suficiente para testar praticamente tudo (build, migrations, CORS, HTTPS, fluxo completo no celular) exceto DNS/TLS reais via Let's Encrypt, que exigem domínio público de fato
 
 ## Decisões Pendentes / A Revisar (baixa prioridade, pós-deploy)
 - [ ] Avaliar soft delete (deleted_at) vs is_active
@@ -377,5 +432,8 @@ serviceflow/
 - [ ] Avaliar computed_field no config.py para DATABASE_URL automático
 - [ ] Técnico autônomo: documentar no onboarding que deve se cadastrar como owner, sugerindo placeholder "Ex: João Silva Refrigeração" no campo empresa
 - [ ] Considerar refatorar `OrdersPage.tsx` para usar componentes shadcn `<Table>` (como Users/Customers) em vez de `<table>` HTML pura com estilos inline — dívida técnica de consistência, não bloqueante para deploy
-- [ ] Rodar `Select-String -Path "src\**\*.tsx" -Pattern "console.log" -Recurse` para confirmar ausência de outros logs de debug esquecidos no projeto
+- [ ] Rodar busca por `console.log` esquecidos em todo o projeto (`Get-ChildItem -Path src -Recurse -Include *.tsx,*.ts | Select-String -Pattern "console.log"`)
 - [ ] Testar UsersPage com usuário técnico logado, para confirmar que botão "Novo Usuário" some corretamente (empty state)
+- [ ] Considerar code-splitting por rota (`React.lazy`) — bundle de produção atual ~211kB gzip, aviso do Vite sobre chunk >500kB, não urgente mas vale revisitar antes do teste em 4G
+- [ ] Considerar simplificar fluxo de login para usar o `user` já retornado em `AuthResponse`, eliminando chamada extra a `/auth/me` (descoberto ao tipar corretamente o schema, ainda não implementado)
+- [ ] Refatorar `get_order` endpoint para não construir `ServiceOrderResponse` manualmente campo a campo — reduz risco de divergência de nomes como a que geramos com `assigned_to`/`technician_id`

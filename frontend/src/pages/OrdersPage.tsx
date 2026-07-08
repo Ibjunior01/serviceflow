@@ -17,7 +17,6 @@ const createOrderSchema = z.object({
     description: z.string().optional(),
     priority: z.enum(['low', 'normal', 'high', 'urgent']),
     customer_id: z.string().optional(),
-    assigned_to: z.string().optional(),
     scheduled_at: z.string().optional(),
 })
 
@@ -203,7 +202,7 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
             const payload = {
                 ...values,
                 customer_id: values.customer_id || undefined,
-                assigned_to: assignedTo || undefined,   // ← era values.assigned_to
+                technician_id: assignedTo || undefined,
                 scheduled_at: values.scheduled_at
                     ? new Date(values.scheduled_at).toISOString()
                     : undefined,
