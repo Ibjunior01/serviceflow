@@ -90,7 +90,7 @@ class ServiceOrderService:
                 "priority": data.priority if data.priority else "normal",
                 "status": "draft",
                 "scheduled_at": data.scheduled_at,
-                "order_number": str(order_number),
+                "order_number": order_number,
                 "service_address": data.location_address,
                 "internal_notes": data.notes,
             },

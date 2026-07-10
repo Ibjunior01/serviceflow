@@ -2,7 +2,7 @@
 
 ## Sessão Atual
 **Fase:** 3 — Preparação para Deploy (Backend + Frontend)
-**Status:** `types/api.ts` gerado e integrado; renomeação `assigned_to` → `technician_id` concluída em backend e frontend, com suíte de testes validada (68/68). Próximos itens: migration `order_number`, `docker-compose.prod.yml` + Caddyfile, CORS de produção, teste mobile via Cloudflare Tunnel.
+**Status:** Migration `order_number` (VARCHAR → INTEGER) concluída em todas as camadas, com `68/68` testes passando. Bug de instalação do shadcn CLI (pasta física `@`) resolvido na raiz. `useAuth.ts` (código morto) removido. Próximos itens: CORS de produção, `docker-compose.prod.yml` + Caddyfile, teste mobile via Cloudflare Tunnel.
 
 ## Progresso das Fases
 
@@ -55,8 +55,8 @@
 - Exceções de domínio em `app/core/exceptions.py` mapeadas para HTTP no `main.py`
 - Máquina de estados da OS em `VALID_TRANSITIONS` no `service_order_service.py`
 - Timestamps automáticos: `started_at` (→ IN_PROGRESS), `completed_at` (→ COMPLETED/CANCELLED)
-- `get_next_order_number()` usa `MAX(order_number)` por tenant
-- `order_number` é `VARCHAR` no banco — migration para `INTEGER` pendente
+- `get_next_order_number()` usa `MAX(order_number)` por tenant — retorna `int` puro
+- `order_number` é `INTEGER` no banco (migrado de `VARCHAR` na Fase 3.3) — valor armazenado é sempre número puro (`1`, `2`, `47`); formatação `"OS-0001"` é feita só na borda (frontend), nunca no banco
 - Técnico só edita OS atribuída a ele
 - OS finalizada (COMPLETED/INVOICED/CANCELLED) não pode ser editada nem deletada
 - Apenas DRAFT pode ser excluída
@@ -70,16 +70,19 @@
 - `service_order_service.list()` monta `PaginatedResponse[ServiceOrderSummary]` manualmente
 - Bug corrigido: `companies.py` endpoint usava args posicionais em `company_service.update()`
 - Bug corrigido: `user_service.update_role()` chamava `.value` em string já serializada
+- Bug corrigido (Fase 3.3): `service_order_service.create()` tinha `"order_number": str(order_number)` residual do tipo `VARCHAR` antigo — causava `DataError` do asyncpg após a migration para `INTEGER`; corrigido para passar o `int` direto
 
-## Decisões de Frontend (Fase 2A + 2B)
-- shadcn/ui com preset `radix-nova` — componentes instalados em `src/components/ui/`
-- Atenção: shadcn com `radix-nova` cria pasta física `@` na raiz em vez de usar `src/` — ao adicionar novos componentes, copiar manualmente para `src/components/ui/` ou trocar `"style": "default"` no `components.json`. **Ainda pendente de aplicar (ver Fase 3).**
+## Decisões de Frontend (Fase 2A + 2B + 3)
+- shadcn/ui com preset `default` (trocado de `radix-nova` na Fase 3) — componentes instalados corretamente em `src/components/ui/`
+- **Bug resolvido (Fase 3):** o CLI do shadcn escrevia componentes numa pasta física `@` na raiz em vez de resolver o alias `@/` — a causa raiz **não** era o preset `radix-nova` (já tínhamos trocado para `default` e o bug persistiu). A causa real é que o projeto usa TypeScript **project references** (`tsconfig.json` raiz só com `references`, sem `compilerOptions` próprias — `paths` do alias `@/*` só existia em `tsconfig.app.json`). O CLI do shadcn lê `tsconfig.json` raiz e não segue `references`, então não encontra o alias e usa o caminho literal. **Correção:** duplicar `baseUrl`/`paths`/`ignoreDeprecations` também no `tsconfig.json` raiz (ver seção dedicada abaixo).
+- `.npmrc` criado na raiz do `frontend/` com `legacy-peer-deps=true` — necessário porque `openapi-typescript@7.13.0` declara peer `typescript@^5.x`, mas o projeto usa `typescript@6.0.3`; esse conflito também afeta o `npm install` interno do CLI do shadcn ao instalar dependências de novos componentes
 - Confirmado: a pasta real do projeto é `src/components/` (inglês), não `src/componentes/` — o alias `@` no import (`@/components/ui/...`) é resolvido via `vite.config.ts`/`tsconfig.json`, não corresponde a uma pasta física chamada `@`
 - `sonner` para notificações toast — importar `toast` de `'sonner'`, usar `toast.success()` / `toast.error()`
 - `useToast` do shadcn NÃO existe no projeto — não usar
 - `<Toaster richColors position="top-right" />` montado no `main.tsx`
 - Axios client em `src/api/client.ts` — importar como `@/api/client` (não `@/lib/api`)
 - `useAuthStore` em `src/store/authStore.ts` — expõe `user`, `setUser`, `setTokens`, `logout`
+- `hooks/useAuth.ts` **removido** (Fase 3) — estava vazio, código morto do scaffold da Fase 2A, nunca importado em lugar nenhum. Todo o app usa `useAuthStore` diretamente. Decisão: se um dia for necessário abstrair a fonte de auth (ex: SSO/OAuth no plano Empresa), criar um wrapper na hora, com o TypeScript indicando os pontos de uso — não vale criar abstração especulativa agora
 - TanStack Query v5: `isPending` (não `isLoading`) nas mutations; `isLoading` continua correto para queries
 - Hooks de dados em `src/hooks/` — padrão: um arquivo por entidade
 - `null` vindo da API não é atribuível a `string | undefined` — converter com `?? undefined` ao passar para forms
@@ -97,31 +100,74 @@
 - Técnico autônomo deve se cadastrar como `owner` — fluxo natural do registro já garante isso
 - `POST /api/v1/orders` permanece `AdminOnly` — técnico autônomo opera como owner
 - `Header.tsx` não existe fisicamente — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
-- `hooks/useAuth.ts` está vazio e não é importado em lugar nenhum — código morto do scaffold da Fase 2A, nunca implementado. **Decisão pendente: remover ou implementar (Fase 3).**
 - **`OrdersPage.tsx` é estruturalmente diferente das outras páginas**: usa `<table>` HTML pura com estilos inline (`style={{...}}`), não os componentes shadcn `<Table>/<TableBody>/<TableRow>` usados em `UsersPage.tsx` e `CustomersPage.tsx` — dívida técnica documentada, não urgente
+- `formatOrderNumber(n: number): string` em `src/lib/format.ts` — exibe `order_number` como `"OS-0001"` (prefixo + zero-padding de 4 dígitos); usada em `OrdersPage.tsx`. Valor armazenado no banco/API continua `number` puro — formatação é só de exibição, nunca de armazenamento
 
-## Tipos da API — geração automática via openapi-typescript (sessão Fase 3.1)
+## tsconfig.json raiz — correção do bug do shadcn CLI (sessão Fase 3.4)
 
-**Problema resolvido:** `src/types/api.ts` estava vazio, causando divergência de tipos entre arquivos (causa raiz da cadeia de bugs `name`/`full_name` da sessão 2B.2).
+**Sintoma:** `npx shadcn add <componente>` criava o arquivo em `frontend/@/components/ui/<componente>.tsx` (pasta física `@` na raiz) em vez de `src/components/ui/<componente>.tsx`, mesmo já com `components.json` configurado com `"style": "default"` e aliases corretos.
 
-**Solução implementada:**
-- Instalado `openapi-typescript@7.13.0` como devDependency (via `--legacy-peer-deps`, necessário porque o pacote declara peer `typescript@^5.x` mas o projeto usa `typescript@6.0.3` — conflito inofensivo, pacote só faz parsing/geração de texto)
-- Script adicionado ao `package.json`: `"generate-types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts"`
-- **Pré-requisito para rodar:** backend precisa estar ativo em `localhost:8000` (`uvicorn app.main:app --reload` ou Docker) — sem isso, o comando falha com `ECONNREFUSED`
-- `src/types/api.ts` agora é gerado automaticamente a partir do `/openapi.json` real do FastAPI — nunca editar manualmente
-- Criado `src/types/index.ts` com re-exports simplificados (`User`, `AuthResponse`, `ServiceOrder`, `Customer`, `PaginatedUsers`, etc.) apontando para `components['schemas'][...]` do arquivo gerado, evitando imports verbosos no resto do código
+**Causas descartadas durante o diagnóstico:**
+- Preset `radix-nova` do `components.json` — já tínhamos trocado para `default`, bug persistiu
+- Falha do `npm install` por conflito de peer dependency (`openapi-typescript` vs `typescript@6.0.3`) — testado instalando a dependência manualmente antes (`npm install <pkg> --legacy-peer-deps`) e o CLI mesmo assim escreveu no caminho errado quando o `npm install` nem precisou rodar
 
-**Refatoração aplicada (com aliases para não quebrar imports existentes):**
-- `src/store/authStore.ts` — `AuthUser` agora é `export type AuthUser = User` (alias do tipo gerado)
-- `src/api/auth.ts` — `MeResponse` agora é alias de `User`; `LoginPayload` agora é alias de `LoginRequest`; `AuthResponse` importado do tipo gerado (revelou que o backend já retorna o `user` completo na resposta de login — oportunidade futura de eliminar uma chamada extra a `/auth/me` após login, não implementada ainda)
-- `src/components/layout/Sidebar.tsx` — nenhuma mudança necessária, já estava correto
+**Causa raiz confirmada:** o projeto usa TypeScript **project references** — `tsconfig.json` raiz tem só `"files": []` e `"references"`, sem `compilerOptions` própria; o alias `@/*` só estava declarado em `tsconfig.app.json`. Ferramentas de terceiros como o CLI do shadcn fazem parsing simples do `tsconfig.json` e não seguem `references` — não encontram o `paths`, então usam o valor cru do alias (`@/components/ui`) como caminho literal.
+
+**Correção aplicada** — `tsconfig.json` (raiz) agora tem:
+```json
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "ignoreDeprecations": "6.0"
+  }
+}
+```
+(`baseUrl`/`paths` duplicado do `tsconfig.app.json`; `ignoreDeprecations: "6.0"` necessário porque `baseUrl` está deprecated a partir do TS 6.0 — mesmo ajuste já feito em `tsconfig.app.json` na Fase 3.1)
+
+**Validação:** `npx shadcn add tooltip` criou o arquivo corretamente em `src/components/ui/tooltip.tsx`; componente de teste removido após confirmação (`npm uninstall @radix-ui/react-tooltip`); `npm run build` limpo.
+
+**Lição para o futuro:** qualquer projeto Vite/TS com `tsconfig` particionado via project references precisa duplicar `paths` no `tsconfig.json` raiz se for usar CLIs de terceiros (shadcn, e potencialmente outras ferramentas de scaffolding) que não seguem `references`.
+
+## Migration `order_number` VARCHAR → INTEGER (sessão Fase 3.3)
+
+**Motivação:** além de tipagem semanticamente correta (é um número, não texto), a coluna como `VARCHAR` fazia `get_next_order_number()` comparar valores **lexicograficamente** no `MAX()` do Postgres — a partir da OS #10, a ordenação de string ficava incorreta (ex: `"9"` é considerado maior que `"10"` em comparação de texto), um bug de lógica de negócio dormente sem teste E2E cobrindo especificamente esse caso.
+
+**Decisão de produto:** exibição ao cliente usa formato `"OS-0001"` (mais profissional), mas isso é **só formatação de apresentação** — o valor armazenado no banco e trafegado pela API é sempre `int` puro. Formatação/prefixo/padding vivem exclusivamente no frontend (`formatOrderNumber()`), preservando a correção do bug de ordenação e mantendo o dado normalizado.
+
+**Arquivos alterados — Backend:**
+- `app/models/service_order.py` — `order_number: Mapped[str] = mapped_column(String, ...)` → `Mapped[int] = mapped_column(Integer, ...)`. Import de `Integer` adicionado (faltou na primeira tentativa, causou `NameError`)
+- Migration Alembic gerada manualmente (autogenerate não lida bem com mudança de tipo em coluna com dados existentes):
+  ```python
+  def upgrade():
+      op.alter_column('service_orders', 'order_number', type_=sa.Integer(),
+          postgresql_using='order_number::integer', existing_type=sa.String(), existing_nullable=False)
+  def downgrade():
+      op.alter_column('service_orders', 'order_number', type_=sa.String(),
+          postgresql_using='order_number::varchar', existing_type=sa.Integer(), existing_nullable=False)
+  ```
+- `app/schemas/service_order.py` — `order_number: str` → `order_number: int` em `ServiceOrderResponse` e `ServiceOrderSummary`
+- **Bug corrigido:** `app/services/service_order_service.py`, método `create()` — tinha `"order_number": str(order_number)` residual do tipo antigo; causava `sqlalchemy.exc.DBAPIError` (`asyncpg.exceptions.DataError`) em toda criação de OS após a migration do schema. Corrigido para `"order_number": order_number` (int direto)
+
+**Arquivos alterados — Frontend:**
+- `src/api/orders.ts` — duas interfaces com `order_number: string` desatualizadas (mesmo padrão de divergência manual da cadeia `name`/`full_name` da Fase 2B.2) → corrigidas para `order_number: number`
+- `src/lib/format.ts` (novo) — `formatOrderNumber(n: number): string` retorna `"OS-" + padStart(4, '0')`
+- `src/pages/OrdersPage.tsx` — aplicado `formatOrderNumber(order.order_number)` na coluna Nº da tabela; removido `#` fixo que sobrou do formato de exibição antigo (ficava duplicado como `#OS-0008`)
+- `types/api.ts` regenerado via `npm run generate-types` (backend precisa estar rodando em `localhost:8000`)
+- Confirmado: `OrderDetailPage.tsx` e `DashboardPage.tsx` não exibem `order_number` em lugar nenhum — não precisaram de alteração. **Observação de UX registrada em pendências:** `OrderDetailPage.tsx` não mostra o número da OS no cabeçalho, só a listagem mostra — avaliar se vale adicionar
 
 **Validação:**
-- `npx tsc --noEmit` limpo
-- `npm run build` (tsc -b && vite build) limpo após dois ajustes adicionais:
-  - `tsconfig.app.json`: adicionado `"ignoreDeprecations": "6.0"` (warning TS5101 sobre `baseUrl`)
-  - `src/main.tsx`: removido `import React from 'react'` não utilizado (TS6133, desnecessário com o JSX transform novo do React 18/Vite)
-- Bundle de produção gerado: `dist/assets/index-*.js` ~686 kB (211 kB gzip) — aviso do Vite sobre chunk > 500kB, não bloqueante; code-splitting por rota (`React.lazy`) considerado como otimização futura, não urgente
+- `python -m pytest -v`: **68 passed**, 0 failed
+- `npx tsc --noEmit` e `npm run build`: limpos
+- Teste visual: coluna Nº exibindo `OS-0008` corretamente, sem duplicação de prefixo
+- Busca de confirmação (`Get-ChildItem -Path app -Recurse -Include *.py | Select-String -Pattern "order_number"`) — todas as ocorrências usando `int` de forma consistente em model, schema, repository, service e endpoint
 
 ## Renomeação `assigned_to` → `technician_id` (sessão Fase 3.2)
 
@@ -148,6 +194,29 @@
 - Busca final confirmando erradicação completa: `Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Select-String -Pattern "assigned_to"` retorna vazio
 
 **Nota de processo (PowerShell no Windows):** `Select-String` não possui parâmetro `-Recurse` — usar `Get-ChildItem -Path <pasta> -Recurse -Include *.ext | Select-String -Pattern "..."` para buscas recursivas de texto em múltiplos arquivos.
+
+## Tipos da API — geração automática via openapi-typescript (sessão Fase 3.1)
+
+**Problema resolvido:** `src/types/api.ts` estava vazio, causando divergência de tipos entre arquivos (causa raiz da cadeia de bugs `name`/`full_name` da sessão 2B.2).
+
+**Solução implementada:**
+- Instalado `openapi-typescript@7.13.0` como devDependency (via `--legacy-peer-deps`, necessário porque o pacote declara peer `typescript@^5.x` mas o projeto usa `typescript@6.0.3` — conflito inofensivo, pacote só faz parsing/geração de texto)
+- Script adicionado ao `package.json`: `"generate-types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts"`
+- **Pré-requisito para rodar:** backend precisa estar ativo em `localhost:8000` (`uvicorn app.main:app --reload` ou Docker) — sem isso, o comando falha com `ECONNREFUSED`
+- `src/types/api.ts` agora é gerado automaticamente a partir do `/openapi.json` real do FastAPI — nunca editar manualmente
+- Criado `src/types/index.ts` com re-exports simplificados (`User`, `AuthResponse`, `ServiceOrder`, `Customer`, `PaginatedUsers`, etc.) apontando para `components['schemas'][...]` do arquivo gerado, evitando imports verbosos no resto do código
+
+**Refatoração aplicada (com aliases para não quebrar imports existentes):**
+- `src/store/authStore.ts` — `AuthUser` agora é `export type AuthUser = User` (alias do tipo gerado)
+- `src/api/auth.ts` — `MeResponse` agora é alias de `User`; `LoginPayload` agora é alias de `LoginRequest`; `AuthResponse` importado do tipo gerado (revelou que o backend já retorna o `user` completo na resposta de login — oportunidade futura de eliminar uma chamada extra a `/auth/me` após login, não implementada ainda)
+- `src/components/layout/Sidebar.tsx` — nenhuma mudança necessária, já estava correto
+
+**Validação:**
+- `npx tsc --noEmit` limpo
+- `npm run build` (tsc -b && vite build) limpo após dois ajustes adicionais:
+  - `tsconfig.app.json`: adicionado `"ignoreDeprecations": "6.0"` (warning TS5101 sobre `baseUrl`)
+  - `src/main.tsx`: removido `import React from 'react'` não utilizado (TS6133, desnecessário com o JSX transform novo do React 18/Vite)
+- Bundle de produção gerado: `dist/assets/index-*.js` ~686 kB (211 kB gzip) — aviso do Vite sobre chunk > 500kB, não bloqueante; code-splitting por rota (`React.lazy`) considerado como otimização futura, não urgente
 
 ## Bugs corrigidos na sessão de 2B.2 (cadeia name vs full_name)
 Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend). **Causa raiz eliminada na Fase 3.1** (ver seção acima) — `types/api.ts` agora é gerado automaticamente e nunca mais diverge manualmente.
@@ -255,10 +324,10 @@ serviceflow/
 │   │   ├── db/
 │   │   │   ├── session.py                         OK
 │   │   │   └── base.py                            OK
-│   │   ├── models/                                OK
+│   │   ├── models/                                OK (service_order.py: order_number Integer)
 │   │   ├── repositories/                          OK
-│   │   ├── schemas/                                OK (service_order.py: technician_id)
-│   │   ├── services/                               OK (service_order_service.py: technician_id, bug de update() corrigido)
+│   │   ├── schemas/                                OK (service_order.py: technician_id, order_number int)
+│   │   ├── services/                               OK (service_order_service.py: technician_id, order_number int sem str() residual)
 │   │   └── main.py                                 OK
 │   ├── tests/                                      OK (68/68 passing)
 │   │   ├── conftest.py                             OK (technician_id)
@@ -269,7 +338,8 @@ serviceflow/
 │   │   └── test_service_orders.py                  OK (technician_id)
 │   ├── alembic/versions/
 │   │   ├── 06d5ab8065eb_initial_schema.py          OK
-│   │   └── xxxx_expand_customer_address_fields.py  OK
+│   │   ├── xxxx_expand_customer_address_fields.py  OK
+│   │   └── xxxx_order_number_varchar_to_integer.py OK
 │   ├── .env
 │   ├── .env.example
 │   ├── .env.test                                   OK
@@ -285,7 +355,7 @@ serviceflow/
     │   │   ├── client.ts                           OK (axios + interceptor JWT)
     │   │   ├── auth.ts                             OK (tipos derivados de types/api.ts)
     │   │   ├── customers.ts                        OK
-    │   │   ├── orders.ts                           OK (technician_id corrigido)
+    │   │   ├── orders.ts                           OK (technician_id + order_number: number corrigidos)
     │   │   └── users.ts                             OK
     │   ├── components/
     │   │   ├── layout/
@@ -294,16 +364,17 @@ serviceflow/
     │   │   └── ui/                                  OK (shadcn/ui components)
     │   │       └── table-skeleton.tsx               OK (componente reutilizável de skeleton)
     │   ├── hooks/
-    │   │   ├── useAuth.ts                          VAZIO — código morto, não importado em lugar nenhum. Decisão pendente (Fase 3).
     │   │   ├── useCompany.ts                       OK
     │   │   ├── useCustomers.ts                     OK
     │   │   ├── useOrders.ts                        OK
     │   │   └── useUsers.ts                          OK (full_name correto)
+    │   ├── lib/
+    │   │   └── format.ts                            OK — formatOrderNumber() (novo, Fase 3.3)
     │   ├── pages/
     │   │   ├── LoginPage.tsx                       OK
     │   │   ├── DashboardPage.tsx                   OK
-    │   │   ├── OrdersPage.tsx                      OK (skeleton, empty state, debug logs, technician_id — todos resolvidos; tabela HTML pura, não shadcn — dívida técnica)
-    │   │   ├── OrderDetailPage.tsx                 OK
+    │   │   ├── OrdersPage.tsx                      OK (skeleton, empty state, debug logs, technician_id, order_number formatado — todos resolvidos; tabela HTML pura, não shadcn — dívida técnica)
+    │   │   ├── OrderDetailPage.tsx                 OK (não exibe order_number — ver pendências de UX)
     │   │   ├── CustomersPage.tsx                   OK (skeleton loading + empty state com botão de ação, ambos validados)
     │   │   ├── UsersPage.tsx                       OK (skeleton loading + empty state com botão de ação, ambos validados)
     │   │   └── SettingsPage.tsx                    OK (form de perfil testado, salva full_name corretamente)
@@ -318,8 +389,9 @@ serviceflow/
     ├── index.html
     ├── vite.config.ts
     ├── tsconfig.app.json                            OK (ignoreDeprecations: "6.0" adicionado)
-    ├── tsconfig.json
-    ├── components.json                              PENDENTE — trocar style radix-nova por default
+    ├── tsconfig.json                                 OK (baseUrl/paths/ignoreDeprecations duplicado — Fase 3.4, corrige bug do shadcn CLI)
+    ├── components.json                              OK (style: "default")
+    ├── .npmrc                                        OK (legacy-peer-deps=true — Fase 3.4)
     └── package.json                                 OK (script generate-types adicionado)
 
 ## Endpoints Implementados (Fase 1F)
@@ -407,9 +479,11 @@ serviceflow/
 - [x] `tsconfig.app.json` — `"ignoreDeprecations": "6.0"` adicionado
 - [x] Build de produção do frontend (`npm run build`) validado localmente
 - [x] Suíte de testes pytest (68/68) validada após as mudanças da sessão
-- [ ] Decidir sobre `hooks/useAuth.ts` vazio — remover ou implementar como wrapper de `useAuthStore`
-- [ ] `order_number` como `INTEGER` no banco (atual é `VARCHAR`) — migration Alembic (próximo item planejado)
-- [ ] `components.json` — trocar `"style": "radix-nova"` por `"style": "default"` para evitar bug de instalação de componentes na pasta `@`
+- [x] `hooks/useAuth.ts` vazio — removido (código morto, decisão tomada)
+- [x] `order_number` como `INTEGER` no banco — migration Alembic concluída (sessão Fase 3.3), incluindo correção de bug latente de `str()` residual e formatação `"OS-0001"` no frontend
+- [x] `components.json` — `"style": "default"` aplicado
+- [x] Bug do shadcn CLI (pasta física `@`) — causa raiz corrigida via `tsconfig.json` raiz duplicando `paths` (sessão Fase 3.4)
+- [x] `.npmrc` com `legacy-peer-deps=true` criado
 - [ ] Variáveis de ambiente de produção — backend (Hetzner) e frontend (Vercel): `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, URL da API pública
 - [ ] Configurar CORS no FastAPI para o domínio de produção do frontend (Vercel)
 - [ ] Dockerfile de produção do backend — revisar se o `Dockerfile` atual (dev) precisa de ajustes para deploy (multi-stage build, non-root user, etc.)
@@ -437,3 +511,5 @@ serviceflow/
 - [ ] Considerar code-splitting por rota (`React.lazy`) — bundle de produção atual ~211kB gzip, aviso do Vite sobre chunk >500kB, não urgente mas vale revisitar antes do teste em 4G
 - [ ] Considerar simplificar fluxo de login para usar o `user` já retornado em `AuthResponse`, eliminando chamada extra a `/auth/me` (descoberto ao tipar corretamente o schema, ainda não implementado)
 - [ ] Refatorar `get_order` endpoint para não construir `ServiceOrderResponse` manualmente campo a campo — reduz risco de divergência de nomes como a que geramos com `assigned_to`/`technician_id`
+- [ ] Avaliar exibir `order_number` (formatado como `OS-0001`) no cabeçalho de `OrderDetailPage.tsx` — hoje só a listagem mostra o número da OS
+- [ ] Considerar aliases de tipo (como já feito em `authStore.ts`/`auth.ts` na Fase 3.1) também em `src/api/orders.ts`, apontando direto para `types/api.ts` — evitaria o mesmo tipo de divergência manual que já causou 2 bugs (`name`/`full_name` e `order_number: string` desatualizado)

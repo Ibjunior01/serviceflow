@@ -11,7 +11,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -63,8 +63,8 @@ class ServiceOrder(UUIDMixin, TimestampMixin, Base):
     )
 
     # Identificação
-    order_number: Mapped[str] = mapped_column(
-        String(50),
+    order_number: Mapped[int] = mapped_column(
+        Integer, 
         unique=True,
         nullable=False,
         index=True,

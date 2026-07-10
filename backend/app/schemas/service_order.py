@@ -65,7 +65,7 @@ class ServiceOrderStatusUpdate(BaseSchema):
 
 class ServiceOrderResponse(ServiceOrderBase):
     id: UUID
-    order_number: str
+    order_number: int
     company_id: UUID
     status: OrderStatus
     total_amount: Decimal
@@ -85,7 +85,7 @@ class ServiceOrderWithItems(ServiceOrderResponse):
 
 class ServiceOrderSummary(BaseSchema):
     id: UUID
-    order_number: str
+    order_number: int
     title: str
     status: OrderStatus
     priority: OrderPriority

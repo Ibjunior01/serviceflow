@@ -10,6 +10,7 @@ import { useCreateOrder } from '@/hooks/useOrders'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatOrderNumber } from '@/lib/format'
 
 // ─── Schema de validação ──────────────────────────────────────────────────────
 const createOrderSchema = z.object({
@@ -486,7 +487,7 @@ export default function OrdersPage() {
                                         onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
                                     >
                                         <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                            #{order.order_number}
+                                            {formatOrderNumber(order.order_number)}
                                         </td>
                                         <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                             {order.title}

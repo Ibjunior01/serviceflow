@@ -1,16 +1,26 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
+from app.core.config import settings
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from app.core.exceptions import (
     NotFoundError, ConflictError, ForbiddenError,
     BusinessRuleError, UnauthorizedError,
 )
- 
+
 app = FastAPI(
     title="ServiceFlow API",
     description="Field Service Management para técnicos de refrigeração e ar-condicionado.",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(NotFoundError)
@@ -32,10 +42,10 @@ async def business_rule_handler(request: Request, exc: BusinessRuleError):
 @app.exception_handler(UnauthorizedError)
 async def unauthorized_handler(request: Request, exc: UnauthorizedError):
     return JSONResponse(status_code=401, content={"detail": exc.message})
- 
+
 # Routers
 app.include_router(api_router, prefix="/api/v1")
- 
+
 @app.get("/health", tags=["Health"])
 async def health():
     return {"status": "ok"}

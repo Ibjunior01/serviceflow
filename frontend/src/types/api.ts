@@ -786,7 +786,7 @@ export interface components {
              */
             id: string;
             /** Order Number */
-            order_number: string;
+            order_number: number;
             /**
              * Company Id
              * Format: uuid
@@ -828,7 +828,7 @@ export interface components {
              */
             id: string;
             /** Order Number */
-            order_number: string;
+            order_number: number;
             /** Title */
             title: string;
             status: components["schemas"]["OrderStatus"];

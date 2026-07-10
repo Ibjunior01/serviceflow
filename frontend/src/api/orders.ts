@@ -2,7 +2,7 @@ import { api } from './client'
 
 export interface ServiceOrder {
     id: string
-    order_number: string
+    order_number: number
     title: string
     status: 'draft' | 'scheduled' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
     priority: 'low' | 'normal' | 'high' | 'urgent'
@@ -14,7 +14,7 @@ export interface ServiceOrder {
 
 export interface ServiceOrderDetail {
     id: string
-    order_number: string
+    order_number: number
     title: string
     description?: string
     status: 'draft' | 'scheduled' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
