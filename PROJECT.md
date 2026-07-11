@@ -2,514 +2,208 @@
 
 ## Sessão Atual
 **Fase:** 3 — Preparação para Deploy (Backend + Frontend)
-**Status:** Migration `order_number` (VARCHAR → INTEGER) concluída em todas as camadas, com `68/68` testes passando. Bug de instalação do shadcn CLI (pasta física `@`) resolvido na raiz. `useAuth.ts` (código morto) removido. Próximos itens: CORS de produção, `docker-compose.prod.yml` + Caddyfile, teste mobile via Cloudflare Tunnel.
+**Status:** Ambiente de produção simulado localmente (Docker Compose + Caddy + Cloudflare Tunnel) **validado de ponta a ponta**, incluindo teste funcional completo em celular real (login, criar cliente, criar OS). Falta apenas: corrigir responsividade mobile, configurar variáveis de ambiente reais do Hetzner/Vercel, e rodar o checkpoint final de pytest antes do primeiro deploy pago.
 
 ## Progresso das Fases
 
 | Fase | Descrição | Status |
 |------|-----------|--------|
-| 1A | Estrutura base + Docker + Config | ✅ Concluída |
-| 1B | Models SQLAlchemy 2.0 + Alembic | ✅ Concluída |
-| 1C | Schemas Pydantic v2 | ✅ Concluída |
-| 1D | Auth JWT (login, refresh, dependency) | ✅ Concluída |
-| 1E | CRUD Base + Service Layer | ✅ Concluída |
-| 1F | Endpoints REST /api/v1 | ✅ Concluída |
-| 1G | Testes Automatizados pytest + httpx | ✅ Concluída |
+| 1A–1G | Backend completo (estrutura, models, schemas, auth, CRUD, endpoints, testes) | ✅ Concluída |
 | 2A | Frontend React + Vite + Tailwind — todas as telas | ✅ Concluída |
 | 2B | Polimento de UX + Preparação para Deploy | ✅ Concluída |
-| 3  | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento |
+| 3 | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento — infraestrutura local 100% validada |
 
-## Decisões de Arquitetura Tomadas
-- Async engine (asyncpg) para performance sob carga
-- Versionamento de API em /api/v1 desde o início
-- Settings via pydantic-settings com validação no boot
-- Docker Compose como ambiente padrão (PostgreSQL + FastAPI)
-- WSL 2 como engine do Docker no Windows
-- UUID v4 como PK em todos os models (gerado pelo Python)
-- `lazy="selectin"` em todos os relationships (obrigatório para async)
-- `ondelete` explícito em todas as FKs (CASCADE / RESTRICT / SET NULL)
-- Totais financeiros calculados no service layer, não no banco
-- Alembic rodando fora do Docker (host=localhost no .env local)
-- `python -m alembic` como padrão (evita problemas de PATH no Windows)
-- `DATABASE_URL` com `postgresql+asyncpg://` para compatibilidade asyncpg
-- `email-validator>=2.0.0` adicionado ao requirements.txt
-- Schemas em `backend/app/schemas/` com padrão Base/Create/Update/Response por entidade
-- `PaginatedResponse[T]` genérico para todas as listagens — exige `total_pages` (usar `ceil`)
-- `ServiceOrderSummary` para dashboards
-- `ServiceOrderStatusUpdate` em endpoint separado (PATCH /orders/{id}/status)
-- `bcrypt==4.0.1` pinado (última versão compatível com passlib)
-- Enums com nomes UPPERCASE no Python, valores serializados em lowercase
-- `role` mapeado como `String` no banco — passar valor string diretamente (não `.value`)
-- Pydantic v2 com `use_enum_values=True` serializa enums para string antes do service layer — nunca chamar `.value` em campos vindos de schemas
-- Slug de Company gerado como `slugify(name)-uuid[:8]`
-- Auth: `CurrentUser`, `AdminOnly`, `OwnerOnly`, `TechOrAbove` como `Annotated[User, Depends(...)]`
-- `require_roles()` retorna `Annotated[User, Depends(_guard)]` — usar como anotação de tipo, nunca dentro de `Depends()`
-- Registro cria Company + User(OWNER) + Subscription(TRIALING 14 dias) em transação única
-- Refresh token sem blacklist no MVP
-- `get_db` é o nome da função de sessão em `app/db/session.py`
-- Todos os comandos executados de dentro de `backend/`
-- Repository Pattern: `repository` cuida dos queries, `service` cuida da lógica de negócio
-- `CRUDBase` genérico com `get`, `get_by`, `list`, `create`, `update`, `delete`, `exists`
-- `list()` no CRUDBase retorna `tuple[list[ModelType], int]`
-- Repositórios e services instanciados como singletons no módulo
-- Exceções de domínio em `app/core/exceptions.py` mapeadas para HTTP no `main.py`
-- Máquina de estados da OS em `VALID_TRANSITIONS` no `service_order_service.py`
-- Timestamps automáticos: `started_at` (→ IN_PROGRESS), `completed_at` (→ COMPLETED/CANCELLED)
-- `get_next_order_number()` usa `MAX(order_number)` por tenant — retorna `int` puro
-- `order_number` é `INTEGER` no banco (migrado de `VARCHAR` na Fase 3.3) — valor armazenado é sempre número puro (`1`, `2`, `47`); formatação `"OS-0001"` é feita só na borda (frontend), nunca no banco
-- Técnico só edita OS atribuída a ele
-- OS finalizada (COMPLETED/INVOICED/CANCELLED) não pode ser editada nem deletada
-- Apenas DRAFT pode ser excluída
-- Apenas OWNER pode alterar roles
-- Campos do model `Customer` detalhados (`address_street`, `address_number`, etc.)
-- `technician_id` é o nome único do campo em todas as camadas (model, schema, service, endpoint, frontend) — ver seção "Renomeação assigned_to → technician_id" abaixo. **`assigned_to` não existe mais em lugar nenhum do projeto.**
-- Testes usam `drop_all/create_all` por teste (sem rollback/truncate — incompatível com asyncpg no Windows)
-- `asyncio_default_fixture_loop_scope = function` no pytest.ini (obrigatório para Windows + pytest-asyncio 0.24)
-- Login via JSON `{"email": ..., "password": ...}` (não OAuth2 form-data)
-- Enums serializados em lowercase pelo Pydantic v2 (`"draft"`, `"admin"`, `"high"`, etc.)
-- `service_order_service.list()` monta `PaginatedResponse[ServiceOrderSummary]` manualmente
-- Bug corrigido: `companies.py` endpoint usava args posicionais em `company_service.update()`
-- Bug corrigido: `user_service.update_role()` chamava `.value` em string já serializada
-- Bug corrigido (Fase 3.3): `service_order_service.create()` tinha `"order_number": str(order_number)` residual do tipo `VARCHAR` antigo — causava `DataError` do asyncpg após a migration para `INTEGER`; corrigido para passar o `int` direto
+## Decisões de Arquitetura (backend) — inalteradas desde sessões anteriores
+- Async engine (asyncpg), API versionada em `/api/v1`, Settings via pydantic-settings com validação no boot
+- UUID v4 como PK, `lazy="selectin"` obrigatório em relationships async, `ondelete` explícito em FKs
+- Repository Pattern (`CRUDBase` genérico) + Service Layer, singletons de módulo
+- `technician_id` (não `assigned_to`) em todas as camadas; `order_number` é `INTEGER` puro no banco, formatação `OS-0001` só no frontend
+- Login via JSON `{"email", "password"}`; refresh sem blacklist no MVP
+- Ver sessões anteriores para o histórico completo de bugs de nomenclatura (`assigned_to`→`technician_id`, `name`→`full_name`, `order_number` VARCHAR→INTEGER) — todos corrigidos e validados com 68/68 testes passando.
 
-## Decisões de Frontend (Fase 2A + 2B + 3)
-- shadcn/ui com preset `default` (trocado de `radix-nova` na Fase 3) — componentes instalados corretamente em `src/components/ui/`
-- **Bug resolvido (Fase 3):** o CLI do shadcn escrevia componentes numa pasta física `@` na raiz em vez de resolver o alias `@/` — a causa raiz **não** era o preset `radix-nova` (já tínhamos trocado para `default` e o bug persistiu). A causa real é que o projeto usa TypeScript **project references** (`tsconfig.json` raiz só com `references`, sem `compilerOptions` próprias — `paths` do alias `@/*` só existia em `tsconfig.app.json`). O CLI do shadcn lê `tsconfig.json` raiz e não segue `references`, então não encontra o alias e usa o caminho literal. **Correção:** duplicar `baseUrl`/`paths`/`ignoreDeprecations` também no `tsconfig.json` raiz (ver seção dedicada abaixo).
-- `.npmrc` criado na raiz do `frontend/` com `legacy-peer-deps=true` — necessário porque `openapi-typescript@7.13.0` declara peer `typescript@^5.x`, mas o projeto usa `typescript@6.0.3`; esse conflito também afeta o `npm install` interno do CLI do shadcn ao instalar dependências de novos componentes
-- Confirmado: a pasta real do projeto é `src/components/` (inglês), não `src/componentes/` — o alias `@` no import (`@/components/ui/...`) é resolvido via `vite.config.ts`/`tsconfig.json`, não corresponde a uma pasta física chamada `@`
-- `sonner` para notificações toast — importar `toast` de `'sonner'`, usar `toast.success()` / `toast.error()`
-- `useToast` do shadcn NÃO existe no projeto — não usar
-- `<Toaster richColors position="top-right" />` montado no `main.tsx`
-- Axios client em `src/api/client.ts` — importar como `@/api/client` (não `@/lib/api`)
-- `useAuthStore` em `src/store/authStore.ts` — expõe `user`, `setUser`, `setTokens`, `logout`
-- `hooks/useAuth.ts` **removido** (Fase 3) — estava vazio, código morto do scaffold da Fase 2A, nunca importado em lugar nenhum. Todo o app usa `useAuthStore` diretamente. Decisão: se um dia for necessário abstrair a fonte de auth (ex: SSO/OAuth no plano Empresa), criar um wrapper na hora, com o TypeScript indicando os pontos de uso — não vale criar abstração especulativa agora
-- TanStack Query v5: `isPending` (não `isLoading`) nas mutations; `isLoading` continua correto para queries
-- Hooks de dados em `src/hooks/` — padrão: um arquivo por entidade
-- `null` vindo da API não é atribuível a `string | undefined` — converter com `?? undefined` ao passar para forms
-- `react-hook-form` + `zod` + `@hookform/resolvers` instalados para validação de formulários
-- Enum `priority` no backend usa `normal` (não `medium`) — mapear `normal` → "Média" no frontend
-- Campo de nome de usuário na API é `full_name` (não `name`) — cadeia de bugs já corrigida (ver sessão 2B.2)
-- `<select>` nativo no Chrome/Windows ignora `style` em `<option>` — usar componente `CustomSelect` com dropdown feito em JSX para casos onde cor/estilo importa
-- `CustomSelect` controlado via `useState` local (`assignedTo`) — não registrado no react-hook-form via `register()`; valor incluído manualmente no payload do `onSubmit` como `technician_id`
-- Guard de permissão `canCreate`/`canAssign` baseado em `useAuthStore` para esconder ações por role
-- Queries com `enabled: canAssign` evitam chamadas 403 desnecessárias para endpoints AdminOnly
-- Dropdown do `CustomSelect` abre para cima (`bottom: calc(100% + 4px)`) para evitar corte pelo modal
-- Bug corrigido: `document: ""` rejeitado pelo validator Pydantic — usar `not v` em vez de `v is None`
-- Bug corrigido: query de usuários duplicada no `CreateOrderModal` causava erro de compilação
-- Bug corrigido: `toast.error(msg)` explodia quando `detail` era array Pydantic v2 — tratar com `Array.isArray`
-- Técnico autônomo deve se cadastrar como `owner` — fluxo natural do registro já garante isso
-- `POST /api/v1/orders` permanece `AdminOnly` — técnico autônomo opera como owner
-- `Header.tsx` não existe fisicamente — o header/perfil de usuário é renderizado dentro de `Sidebar.tsx` (rodapé "User footer")
-- **`OrdersPage.tsx` é estruturalmente diferente das outras páginas**: usa `<table>` HTML pura com estilos inline (`style={{...}}`), não os componentes shadcn `<Table>/<TableBody>/<TableRow>` usados em `UsersPage.tsx` e `CustomersPage.tsx` — dívida técnica documentada, não urgente
-- `formatOrderNumber(n: number): string` em `src/lib/format.ts` — exibe `order_number` como `"OS-0001"` (prefixo + zero-padding de 4 dígitos); usada em `OrdersPage.tsx`. Valor armazenado no banco/API continua `number` puro — formatação é só de exibição, nunca de armazenamento
+---
 
-## tsconfig.json raiz — correção do bug do shadcn CLI (sessão Fase 3.4)
+## Sessão Fase 3.5 — Deploy local completo + validação mobile (11/07/2026)
 
-**Sintoma:** `npx shadcn add <componente>` criava o arquivo em `frontend/@/components/ui/<componente>.tsx` (pasta física `@` na raiz) em vez de `src/components/ui/<componente>.tsx`, mesmo já com `components.json` configurado com `"style": "default"` e aliases corretos.
+Sessão longa e trabalhosa, mas terminou com o ambiente de produção simulado 100% funcional, incluindo teste real em celular. Documentando os bugs encontrados em detalhe porque vários têm causas raiz não óbvias — vale a leitura antes de mexer em Caddy/Docker/Vite de novo.
 
-**Causas descartadas durante o diagnóstico:**
-- Preset `radix-nova` do `components.json` — já tínhamos trocado para `default`, bug persistiu
-- Falha do `npm install` por conflito de peer dependency (`openapi-typescript` vs `typescript@6.0.3`) — testado instalando a dependência manualmente antes (`npm install <pkg> --legacy-peer-deps`) e o CLI mesmo assim escreveu no caminho errado quando o `npm install` nem precisou rodar
+### 1. CORS em produção — bug `NoDecode`
 
-**Causa raiz confirmada:** o projeto usa TypeScript **project references** — `tsconfig.json` raiz tem só `"files": []` e `"references"`, sem `compilerOptions` própria; o alias `@/*` só estava declarado em `tsconfig.app.json`. Ferramentas de terceiros como o CLI do shadcn fazem parsing simples do `tsconfig.json` e não seguem `references` — não encontram o `paths`, então usam o valor cru do alias (`@/components/ui`) como caminho literal.
+**Sintoma:** `pydantic_settings.exceptions.SettingsError` / `JSONDecodeError` ao subir o backend com `CORS_ORIGINS` definido como string separada por vírgula no `.env`.
 
-**Correção aplicada** — `tsconfig.json` (raiz) agora tem:
-```json
+**Causa:** o pydantic-settings tenta fazer `json.loads()` automaticamente em qualquer campo `list[...]` lido do `.env`, antes mesmo do `field_validator` rodar. Uma string tipo `"http://a.com,http://b.com"` não é JSON válido.
+
+**Correção aplicada em `app/core/config.py`:**
+```python
+from typing import Annotated
+from pydantic_settings import BaseSettings, NoDecode
+from pydantic import field_validator
+
+class Settings(BaseSettings):
+    ...
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+```
+
+`Annotated[list[str], NoDecode]` desliga o parsing automático de JSON só nesse campo, deixando o `field_validator` fazer o `.split(",")` normalmente.
+
+**`main.py`** — middleware adicionado logo após `app = FastAPI(...)`, antes dos exception handlers e do `include_router`:
+```python
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+`allow_credentials=True` é obrigatório (JWT via header `Authorization`), o que implica que `CORS_ORIGINS` nunca pode conter `"*"` — sempre domínios explícitos.
+
+**Bug secundário corrigido:** `config.py` tinha `SECRET_KEY: str` declarado duas vezes (linhas duplicadas) — inofensivo (Python só usa a última), mas removido por limpeza.
+
+### 2. `Dockerfile.prod` — multi-stage build
+
+Criado `backend/Dockerfile.prod` (mantendo o `Dockerfile` de dev intacto, separado):
+- **Stage `builder`**: `python:3.14-slim` + `gcc`/`libpq-dev` (compilação de `asyncpg`/`bcrypt`) → `pip install --user -r requirements.lock`
+- **Stage `runtime`**: só `libpq5` (lib de runtime, sem headers de compilação) + usuário non-root (`appuser`) + `COPY --from=builder /root/.local /home/appuser/.local`
+- `PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`, sem `--reload`
+- `.dockerignore` criado (`.venv/`, `__pycache__/`, `.env`, `tests/`, `.git/`, etc.)
+
+**Bug encontrado:** build falhava com `ModuleNotFoundError: No module named 'email_validator'` — `requirements.lock` estava desatualizado em relação ao `requirements.txt` (dependência transitiva do `EmailStr` do Pydantic nunca foi propagada pro lock). **Corrigido** com `pip freeze > requirements.lock` no ambiente local, seguido de `docker build --no-cache` (build cacheado não pegava o lock novo automaticamente na primeira tentativa).
+
+**Validado:** container sobe standalone, `/health` responde 200 com `{"status":"ok"}`.
+
+### 3. `docker-compose.prod.yml` + `Caddyfile` — a parte mais difícil da sessão
+
+**Estrutura final do compose** (raiz do projeto): serviços `postgres` (16-alpine, healthcheck via `pg_isready -U ... -d ...` — precisa do `-d <database>`, senão gera erro `FATAL: database "user" does not exist` em loop, porque o Postgres tenta abrir um banco com o mesmo nome do usuário por padrão), `backend` (usa `Dockerfile.prod`, `DATABASE_URL` sobrescrito via `environment:` apontando para `postgres:5432` — dentro da rede Docker, serviços se enxergam pelo nome, nunca por `localhost`), `caddy` (portas 80/443 publicadas, único serviço realmente exposto ao host Windows).
+
+**Pegadinha de variáveis:** `${POSTGRES_USER}` etc. usados diretamente no YAML do compose (fora de `env_file:`) exigem um `.env` **na raiz do projeto** (onde o `docker compose` é executado) — different mechanism do `env_file:` dos serviços, que injeta variáveis *dentro* do container. Os dois são necessários e não se substituem.
+
+**Caddyfile — histórico de bugs, do mais simples ao mais sutil:**
+1. Typo `:433` em vez de `:443` — TLS falhava silenciosamente porque a porta configurada não é a publicada no compose.
+2. Bloco `localhost { }` só responde a requisições com `Host: localhost` — ao testar via túnel (`Host: algo.trycloudflare.com`), o Caddy não casava a config e retornava 200 vazio (`Content-Length: 0`). Trocado temporariamente para `:443 { }` (coringa).
+3. Com `:443 { }` sem hostname declarado, `tls internal` **nunca emite o certificado de folha** (só a CA raiz) — handshake TLS quebra com `tls: internal error` tanto local quanto via túnel. Diagnosticado inspecionando `/data/caddy/certificates` (inexistente) dentro do container.
+4. **Causa raiz de fundo, corrigida:** em vez de brigar com certificado dinâmico para hostname coringa, a perna "túnel → Caddy local" foi movida para **HTTP puro (porta 80)** — a criptografia real (túnel → celular) já é garantida pela própria Cloudflare na borda; a perna interna nunca sai da máquina/rede Docker. Isso elimina a necessidade de TLS válido internamente.
+5. Com bloco `:80 { }` adicionado, o Caddy aplicava **redirect automático HTTP→HTTPS** mesmo assim (`308 Permanent Redirect`), porque `auto_https` é ligado globalmente por padrão sempre que existe qualquer bloco HTTPS na config (o `localhost { tls internal }` mantido para testes locais). **Correção final:**
+```
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "ignoreDeprecations": "6.0"
-  }
+    auto_https off
+}
+
+localhost {
+    tls internal
+    reverse_proxy /api/* backend:8000
+    reverse_proxy /health backend:8000
+}
+
+:80 {
+    reverse_proxy /api/* backend:8000
+    reverse_proxy /health backend:8000
 }
 ```
-(`baseUrl`/`paths` duplicado do `tsconfig.app.json`; `ignoreDeprecations: "6.0"` necessário porque `baseUrl` está deprecated a partir do TS 6.0 — mesmo ajuste já feito em `tsconfig.app.json` na Fase 3.1)
+`auto_https off` desliga tanto a emissão automática de certificado quanto os redirects — cada bloco de site passa a se comportar exatamente como declarado.
 
-**Validação:** `npx shadcn add tooltip` criou o arquivo corretamente em `src/components/ui/tooltip.tsx`; componente de teste removido após confirmação (`npm uninstall @radix-ui/react-tooltip`); `npm run build` limpo.
+**Falsas pistas investigadas e descartadas durante o diagnóstico** (documentando para não repetir): conflito de porta com `wslrelay` (processo legítimo do Docker Desktop/WSL2, não era a causa), dessincronia de relógio Windows↔WSL2 (relógios estavam corretos, erro de cálculo de fuso horário meu), múltiplos processos `cloudflared` concorrentes (só havia um). O log `Failed to initialize DNS local resolver` do `cloudflared` é **cosmético** e aparece sempre, mesmo em túneis saudáveis — não indica problema.
 
-**Lição para o futuro:** qualquer projeto Vite/TS com `tsconfig` particionado via project references precisa duplicar `paths` no `tsconfig.json` raiz se for usar CLIs de terceiros (shadcn, e potencialmente outras ferramentas de scaffolding) que não seguem `references`.
+**Comando de teste local que expôs cada bug:** `curl.exe -kv https://localhost/health` (headers completos) foi essencial para diferenciar "conexão recusada" de "TLS handshake falhou" de "200 vazio por Host mismatch".
 
-## Migration `order_number` VARCHAR → INTEGER (sessão Fase 3.3)
+### 4. Migrations em produção — validadas do zero
 
-**Motivação:** além de tipagem semanticamente correta (é um número, não texto), a coluna como `VARCHAR` fazia `get_next_order_number()` comparar valores **lexicograficamente** no `MAX()` do Postgres — a partir da OS #10, a ordenação de string ficava incorreta (ex: `"9"` é considerado maior que `"10"` em comparação de texto), um bug de lógica de negócio dormente sem teste E2E cobrindo especificamente esse caso.
+Com `docker compose down -v` (reset completo de volumes, incluindo `postgres_data`), confirmado banco genuinamente vazio (`\dt` → "Did not find any relations"). Rodado:
+```powershell
+docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade head
+```
+As 3 revisions aplicaram em sequência sem erro; `\dt` depois confirmou as 7 tabelas esperadas (incluindo `alembic_version`). **Fluxo completo validado**: banco vazio → migrations → registro de usuário (`POST /auth/register`, 201) → login (`POST /auth/login`, 200) — tudo dentro do ambiente containerizado, via porta 80 do Caddy.
 
-**Decisão de produto:** exibição ao cliente usa formato `"OS-0001"` (mais profissional), mas isso é **só formatação de apresentação** — o valor armazenado no banco e trafegado pela API é sempre `int` puro. Formatação/prefixo/padding vivem exclusivamente no frontend (`formatOrderNumber()`), preservando a correção do bug de ordenação e mantendo o dado normalizado.
+### 5. Cloudflare Tunnel — setup e pegadinhas
 
-**Arquivos alterados — Backend:**
-- `app/models/service_order.py` — `order_number: Mapped[str] = mapped_column(String, ...)` → `Mapped[int] = mapped_column(Integer, ...)`. Import de `Integer` adicionado (faltou na primeira tentativa, causou `NameError`)
-- Migration Alembic gerada manualmente (autogenerate não lida bem com mudança de tipo em coluna com dados existentes):
-  ```python
-  def upgrade():
-      op.alter_column('service_orders', 'order_number', type_=sa.Integer(),
-          postgresql_using='order_number::integer', existing_type=sa.String(), existing_nullable=False)
-  def downgrade():
-      op.alter_column('service_orders', 'order_number', type_=sa.String(),
-          postgresql_using='order_number::varchar', existing_type=sa.Integer(), existing_nullable=False)
-  ```
-- `app/schemas/service_order.py` — `order_number: str` → `order_number: int` em `ServiceOrderResponse` e `ServiceOrderSummary`
-- **Bug corrigido:** `app/services/service_order_service.py`, método `create()` — tinha `"order_number": str(order_number)` residual do tipo antigo; causava `sqlalchemy.exc.DBAPIError` (`asyncpg.exceptions.DataError`) em toda criação de OS após a migration do schema. Corrigido para `"order_number": order_number` (int direto)
+- `winget install --id Cloudflare.cloudflared` instala mas não atualiza o PATH da sessão atual do PowerShell — precisa reabrir o terminal, ou (nesse caso) usar o caminho completo: `C:\Program Files (x86)\cloudflared\cloudflared.exe`.
+- Comando usado (perna backend): `& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --url http://localhost:80` (HTTP puro, ver seção Caddyfile acima).
+- URLs de "quick tunnel" são **efêmeras** — só existem enquanto aquele processo `cloudflared` específico está rodando; fechar o terminal mata a URL.
+- **`Error 1033` / `Error 502`**: sempre investigar primeiro se o processo `cloudflared` ainda está vivo e se os containers (`docker compose ps`) ainda estão `Up` — várias vezes o Caddy tinha caído silenciosamente depois de comandos `up --build <service>` parciais sem `-d`.
 
-**Arquivos alterados — Frontend:**
-- `src/api/orders.ts` — duas interfaces com `order_number: string` desatualizadas (mesmo padrão de divergência manual da cadeia `name`/`full_name` da Fase 2B.2) → corrigidas para `order_number: number`
-- `src/lib/format.ts` (novo) — `formatOrderNumber(n: number): string` retorna `"OS-" + padStart(4, '0')`
-- `src/pages/OrdersPage.tsx` — aplicado `formatOrderNumber(order.order_number)` na coluna Nº da tabela; removido `#` fixo que sobrou do formato de exibição antigo (ficava duplicado como `#OS-0008`)
-- `types/api.ts` regenerado via `npm run generate-types` (backend precisa estar rodando em `localhost:8000`)
-- Confirmado: `OrderDetailPage.tsx` e `DashboardPage.tsx` não exibem `order_number` em lugar nenhum — não precisaram de alteração. **Observação de UX registrada em pendências:** `OrderDetailPage.tsx` não mostra o número da OS no cabeçalho, só a listagem mostra — avaliar se vale adicionar
+### 6. Frontend — proxy do Vite + `allowedHosts`
 
-**Validação:**
-- `python -m pytest -v`: **68 passed**, 0 failed
-- `npx tsc --noEmit` e `npm run build`: limpos
-- Teste visual: coluna Nº exibindo `OS-0008` corretamente, sem duplicação de prefixo
-- Busca de confirmação (`Get-ChildItem -Path app -Recurse -Include *.py | Select-String -Pattern "order_number"`) — todas as ocorrências usando `int` de forma consistente em model, schema, repository, service e endpoint
+`client.ts` usa `baseURL: '/api/v1'` (relativo) — depende do proxy do Vite (`vite.config.ts`) para rotear até o backend. Como o backend **não publica porta pro host** nesse setup (só o Caddy publica 80/443), o proxy precisa apontar para o Caddy, não direto pro backend:
+```typescript
+server: {
+    proxy: {
+        '/api': { target: 'http://127.0.0.1:80', changeOrigin: true },
+    },
+    allowedHosts: ['.trycloudflare.com'],
+}
+```
+`allowedHosts` é necessário porque o Vite 5+ bloqueia por padrão requisições com `Host` header de domínios externos não listados (proteção de segurança nova) — sem isso, erro `Blocked request. This host ... is not allowed`. O coringa `.trycloudflare.com` evita precisar editar a cada novo túnel gerado (nome aleatório muda sempre).
 
-## Renomeação `assigned_to` → `technician_id` (sessão Fase 3.2)
+**Importante:** como o proxy roda no processo Node do Vite (server-side), não há CORS envolvido nesse caminho — a chamada nunca é cross-origin do ponto de vista do navegador. `CORS_ORIGINS` do backend não precisou ser tocado para o teste mobile funcionar.
 
-**Motivação:** consistência de nome em todas as camadas (o model SQLAlchemy sempre usou `technician_id`; só os schemas Pydantic de entrada usavam `assigned_to`, exigindo tradução manual).
+Segundo túnel, dedicado ao frontend: `cloudflared tunnel --url http://localhost:5173` (depois de rodar `npm run dev -- --host` para o Vite escutar em todas as interfaces).
 
-**Bug latente descoberto e corrigido:** no método `update()` de `service_order_service.py`, o payload é montado via `data.model_dump(exclude_unset=True)` passado direto ao repository — sem tradução manual do nome do campo (diferente do `create()`, que tinha uma linha explícita `"technician_id": data.assigned_to`). Isso significa que **atualizar o técnico responsável de uma OS já existente via `PATCH /orders/{id}` provavelmente nunca funcionou corretamente** antes desta correção — o dict chegava ao repo com a chave `assigned_to`, que o model não reconhece. Não havia teste E2E cobrindo esse caminho específico, por isso passou despercebido. Corrigido automaticamente ao renomear o schema (o `model_dump()` agora gera a chave certa sem tradução).
+### 7. Bug de ambiente duplicado — duas bases de dados diferentes
 
-**Arquivos alterados — Backend:**
-- `app/schemas/service_order.py` — `assigned_to: Optional[UUID] = None` → `technician_id: Optional[UUID] = None` em `ServiceOrderBase` e `ServiceOrderUpdate`
-- `app/services/service_order_service.py` — método `create()`: `"technician_id": data.assigned_to` → `"technician_id": data.technician_id`
-- `app/api/v1/endpoints/service_orders.py` — endpoint `get_order()`: construção manual de `ServiceOrderResponse(...)` tinha `assigned_to=order.technician_id` como nome de argumento → corrigido para `technician_id=order.technician_id`. **Nota:** esse é o único endpoint que constrói a resposta campo a campo manualmente (por causa de dados combinados de relacionamentos como `customer.name`/`technician.full_name`); `create_order` e `update_order` retornam o objeto do banco direto e o FastAPI serializa via `response_model` automaticamente — candidato a refatoração futura para reduzir esse tipo de risco.
-- `tests/test_service_orders.py` — 4 ocorrências de `"assigned_to": tech_id` → `"technician_id": tech_id` (linhas originais 23, 135, 186, 248)
-- `tests/conftest.py` — 1 ocorrência de `"assigned_to": tech_id` → `"technician_id": tech_id` (linha original 168)
+**Sintoma muito confuso:** login funcionava perfeitamente via `POST /api/v1/auth/login` batendo em `127.0.0.1:8000/docs`, mas o mesmo usuário/senha dava "e-mail ou senha inválidos" no frontend (via túnel).
 
-**Arquivos alterados — Frontend:**
-- `src/api/orders.ts` — interfaces `ServiceOrderCreate` e `ServiceOrderUpdate`: `assigned_to?: string` → `technician_id?: string` (comentário obsoleto removido)
-- `src/pages/OrdersPage.tsx`:
-  - Removido campo morto `assigned_to: z.string().optional()` do `createOrderSchema` (Zod) — esse campo nunca era preenchido pelo react-hook-form, já que o `CustomSelect` de técnico é controlado via `useState` (`assignedTo`) separado; o valor real sempre veio da variável de state, não de `values.assigned_to`
-  - Payload de `onSubmit`: `assigned_to: assignedTo || undefined` → `technician_id: assignedTo || undefined`
+**Causa raiz:** existiam **dois Postgres diferentes** em jogo:
+1. Um container antigo (`backend-db-1`, de projeto/sessão anterior, publicando `5432` pro Windows) — alcançável via `localhost:5432`, usado por qualquer processo backend rodando **fora** do Docker (ex.: um `uvicorn --reload` solto).
+2. O Postgres **do `docker-compose.prod.yml`** — sem porta publicada, acessível só de dentro da rede Docker via `postgres:5432` — é o que o backend containerizado (e, por consequência, o frontend via Caddy/túnel) realmente usa.
 
-**Validação:**
-- `python -m pytest -v` (de dentro de `backend/`): **68 passed**, 0 failed
-- `npx tsc --noEmit` e `npm run build`: limpos
-- Busca final confirmando erradicação completa: `Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Select-String -Pattern "assigned_to"` retorna vazio
+Testar em `127.0.0.1:8000/docs` sempre bateu no banco errado (antigo/dev), gerando a falsa sensação de que "funciona ali mas não no app". **Lição:** ao testar múltiplos ambientes (dev solto vs. Docker Compose) na mesma máquina, sempre confirmar explicitamente qual porta/processo está respondendo antes de comparar resultados.
 
-**Nota de processo (PowerShell no Windows):** `Select-String` não possui parâmetro `-Recurse` — usar `Get-ChildItem -Path <pasta> -Recurse -Include *.ext | Select-String -Pattern "..."` para buscas recursivas de texto em múltiplos arquivos.
+**Resolução:** usuário `mobile@service.com` / `Senha123` registrado **direto no ambiente containerizado** via `Invoke-RestMethod` contra `http://localhost/api/v1/auth/register` (porta 80, através do Caddy) — esse sim compartilhado com o frontend.
 
-## Tipos da API — geração automática via openapi-typescript (sessão Fase 3.1)
+### 8. Teste mobile completo — validado com sucesso ✅
 
-**Problema resolvido:** `src/types/api.ts` estava vazio, causando divergência de tipos entre arquivos (causa raiz da cadeia de bugs `name`/`full_name` da sessão 2B.2).
+No celular (Safari, via túnel do frontend), fluxo completo testado e confirmado:
+1. Login com `mobile@service.com` — sucesso.
+2. Criação de cliente ("Celteste") — sucesso.
+3. Criação de OS ("Teste cel", vinculada ao cliente criado) — sucesso (havia dado erro `customer_id: Field required` na primeira tentativa, por tentar criar OS antes de existir qualquer cliente cadastrado — resolvido cadastrando o cliente primeiro).
 
-**Solução implementada:**
-- Instalado `openapi-typescript@7.13.0` como devDependency (via `--legacy-peer-deps`, necessário porque o pacote declara peer `typescript@^5.x` mas o projeto usa `typescript@6.0.3` — conflito inofensivo, pacote só faz parsing/geração de texto)
-- Script adicionado ao `package.json`: `"generate-types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts"`
-- **Pré-requisito para rodar:** backend precisa estar ativo em `localhost:8000` (`uvicorn app.main:app --reload` ou Docker) — sem isso, o comando falha com `ECONNREFUSED`
-- `src/types/api.ts` agora é gerado automaticamente a partir do `/openapi.json` real do FastAPI — nunca editar manualmente
-- Criado `src/types/index.ts` com re-exports simplificados (`User`, `AuthResponse`, `ServiceOrder`, `Customer`, `PaginatedUsers`, etc.) apontando para `components['schemas'][...]` do arquivo gerado, evitando imports verbosos no resto do código
+Confirmado também via desktop (`http://localhost:5173`), mesma base de dados compartilhada: Dashboard mostrando a OS criada pelo celular, listagem de Ordens (`OS-0001`, formatação correta), listagem de Clientes, listagem de Usuários — tudo consistente.
 
-**Refatoração aplicada (com aliases para não quebrar imports existentes):**
-- `src/store/authStore.ts` — `AuthUser` agora é `export type AuthUser = User` (alias do tipo gerado)
-- `src/api/auth.ts` — `MeResponse` agora é alias de `User`; `LoginPayload` agora é alias de `LoginRequest`; `AuthResponse` importado do tipo gerado (revelou que o backend já retorna o `user` completo na resposta de login — oportunidade futura de eliminar uma chamada extra a `/auth/me` após login, não implementada ainda)
-- `src/components/layout/Sidebar.tsx` — nenhuma mudança necessária, já estava correto
+### 9. Pendência conhecida, não resolvida ainda
 
-**Validação:**
-- `npx tsc --noEmit` limpo
-- `npm run build` (tsc -b && vite build) limpo após dois ajustes adicionais:
-  - `tsconfig.app.json`: adicionado `"ignoreDeprecations": "6.0"` (warning TS5101 sobre `baseUrl`)
-  - `src/main.tsx`: removido `import React from 'react'` não utilizado (TS6133, desnecessário com o JSX transform novo do React 18/Vite)
-- Bundle de produção gerado: `dist/assets/index-*.js` ~686 kB (211 kB gzip) — aviso do Vite sobre chunk > 500kB, não bloqueante; code-splitting por rota (`React.lazy`) considerado como otimização futura, não urgente
+**Responsividade mobile:** a tela de login (e possivelmente outras) aparece cortada no celular, exigindo scroll horizontal / zoom manual. Ainda não diagnosticada a fundo — hipóteses não testadas: meta tag de viewport ausente no `index.html`, ou largura fixa em algum container de `LoginPage.tsx`. **Não bloqueou a validação funcional** (login e CRUD funcionaram apesar do layout ruim), mas precisa ser corrigida antes de considerar o app pronto para uso real em campo.
 
-## Bugs corrigidos na sessão de 2B.2 (cadeia name vs full_name)
-Causa raiz: `src/types/api.ts` vazio, então tipos de usuário duplicados e divergentes em vários arquivos, alguns com `name` (errado) em vez de `full_name` (campo real retornado pelo backend). **Causa raiz eliminada na Fase 3.1** (ver seção acima) — `types/api.ts` agora é gerado automaticamente e nunca mais diverge manualmente.
+---
 
-Corrigidos:
-- `src/store/authStore.ts` — `AuthUser.name` trocado para `AuthUser.full_name`
-- `src/api/auth.ts` — `MeResponse.name` trocado para `MeResponse.full_name`
-- `src/components/layout/Sidebar.tsx` — `user?.name` trocado para `user?.full_name` (2 ocorrências: cálculo de `initials` e texto exibido no rodapé)
+## Fase 3 — Checklist atualizado
 
-Confirmado como correto / falso positivo (campo `name` é o certo para essas entidades, não confundir com o bug):
-- `src/api/customers.ts:5` — Customer usa `name`
-- `src/hooks/useCompany.ts:6` — Company usa `name`
-- `src/hooks/useCustomers.ts:6,21` — Customer usa `name`
-- `src/hooks/useUsers.ts:8,16` — já usava `full_name` corretamente
-- `NewUserForm` (dentro de UsersPage) — já usava `full_name` corretamente em todo o componente
-
-Testes E2E realizados e aprovados na sessão 2B.2:
-1. Login sem F5 → nome e iniciais aparecem corretos na Sidebar imediatamente
-2. Verificação do objeto `user` no estado do authStore → `full_name` presente e correto
-3. F5 após login → nome permanece correto (sem regressão de hidratação)
-4. Dropdown de técnico no OrdersPage → nomes aparecem corretos
-5. Edição de perfil (SettingsPage) → salva e persiste `full_name` corretamente
-
-## Skeleton Loading — Implementado e validado (sessão 2B.3)
-
-**Componentes criados:**
-- `src/components/ui/table-skeleton.tsx` — componente reutilizável `<TableSkeleton rows={N} columns={N} />`, usado em páginas com componentes shadcn `<Table>`. Retorna seu próprio `<TableBody>` internamente — nunca aninhar dentro de outro `<TableBody>`.
-- `OrdersPage.tsx` não usa `TableSkeleton` (ver nota estrutural acima) — usa o componente `Skeleton` do shadcn diretamente dentro de um `<table>` HTML pura com `<thead>` real e 8 linhas × 7 colunas de barras animadas.
-
-**Padrão aplicado por página:**
-- `UsersPage.tsx`: `{isLoading ? <TableSkeleton rows={5} columns={columnCount} /> : <TableBody>{...}</TableBody>}`, onde `columnCount = isOwner ? 5 : 4`
-- `CustomersPage.tsx`: mesmo padrão, com 3 estados (`isLoading` → skeleton; `customers.length === 0` → empty state; senão → dados), `columns={isAdmin ? 5 : 4}`
-- `OrdersPage.tsx`: `<table>` de skeleton com cabeçalho real (Nº, Título, Cliente, Técnico, Prioridade, Status, Data); import `Skeleton` de `@/components/ui/skeleton`
-
-**Validação realizada:**
-- Skeleton confirmado renderizando corretamente via vídeo de teste na tela de Usuários (barras animadas visíveis antes dos dados reais aparecerem)
-- CustomersPage e OrdersPage com código revisado linha a linha, estruturalmente equivalentes ao padrão validado
-- Prints de rede (Network tab, throttle Slow 4G) confirmam carregamento bem-sucedido sem erros de console em Users e Orders
-- Metodologia de teste validada: throttle "Slow 4G" no DevTools é suficiente e mais previsível que "3G"
-- Para testes futuros de loading state: ativar o throttle **depois** que o app já montou, ou usar "Screenshots" do painel Network
-
-## Empty States — Implementado e validado (sessão 2B.4)
-
-**Padrão aplicado (título + descrição + botão condicional por permissão):**
-- `OrdersPage.tsx` — já existia desde a criação da tela; mensagem contextual (filtro ativo vs sem OS) + botão "Criar OS →"; botão oculto quando há filtro de status ativo (o problema é o filtro, não a ausência de dados)
-- `CustomersPage.tsx` — mensagem contextual já existia (busca vs cadastro vazio); adicionado botão "Novo Cliente" via `openCreate`, visível apenas quando `isAdmin && !search`
-- `UsersPage.tsx` — criado do zero: `TableBody` reestruturado com ternário `users.length === 0 ? (empty state) : users.map(...)`; botão "Novo Usuário" visível apenas quando `isAdmin`; usa `colSpan={columnCount}`
-
-**Testes realizados:**
-- CustomersPage e OrdersPage: validado via busca/filtro sem resultados (cenário real)
-- UsersPage: validado via mock temporário (`const users: AppUser[] = []`) — confirmado visualmente que mensagem e botão aparecem para admin/owner; reversão do mock confirmada antes de prosseguir
-- Pendente (não bloqueante): testar UsersPage com um usuário técnico logado, para confirmar que o botão "Novo Usuário" some corretamente nesse caso
-
-## Limpeza de Debug (sessão 2B.4)
-- Removidos os 3 `console.log` de debug em `OrdersPage.tsx`:
-  - `CustomSelect`: `console.log('CustomSelect options:', options)`
-  - `CreateOrderModal`: `console.log('items:', usersData?.items)`
-  - `CreateOrderModal`: `console.log('technicians após filtro:', technicians)`
-- Recomendado (não executado ainda): rodar `Get-ChildItem -Path src -Recurse -Include *.tsx,*.ts | Select-String -Pattern "console.log"` para confirmar que não restam outros logs esquecidos no projeto
-
-## Stack Técnica
-- **Backend:** FastAPI + Python 3.14
-- **ORM:** SQLAlchemy 2.0 (DeclarativeBase, Mapped, mapped_column)
-- **Banco:** PostgreSQL 16 Alpine via Docker
-- **Migrations:** Alembic 1.18.4
-- **Validação:** Pydantic v2 + pydantic-settings
-- **Auth:** python-jose + passlib + bcrypt==4.0.1
-- **Driver async:** asyncpg 0.31.0
-- **Testes:** pytest + pytest-asyncio + httpx (AsyncClient)
-- **Banco de testes:** PostgreSQL separado via Docker (serviceflow_test)
-- **Venv:** .venv em serviceflow/ (raiz do projeto)
-- **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- **Geração de tipos:** openapi-typescript 7.13.0 (`npm run generate-types`, requer backend ativo em localhost:8000)
-- **Estado global:** Zustand com persist (chave `sf-auth`)
-- **Cache/sync:** TanStack Query v5
-- **Roteamento:** React Router v6
-- **Notificações:** Sonner
-- **Formulários:** react-hook-form + zod + @hookform/resolvers
-
-## Planos e Preços
-- Free: R$ 0/mês
-- Básico: R$ 67/mês
-- Pro: R$ 127/mês
-- Empresa: R$ 247/mês
-
-## Estrutura de Pastas (estado atual)
-
-serviceflow/
-├── .venv/
-├── backend/
-│   ├── app/
-│   │   ├── api/v1/
-│   │   │   ├── router.py                          OK
-│   │   │   └── endpoints/
-│   │   │       ├── auth.py                        OK
-│   │   │       ├── companies.py                   OK
-│   │   │       ├── users.py                       OK
-│   │   │       ├── customers.py                   OK
-│   │   │       └── service_orders.py              OK (get_order: technician_id corrigido)
-│   │   ├── core/
-│   │   │   ├── config.py                          OK
-│   │   │   ├── security.py                        OK
-│   │   │   ├── dependencies.py                    OK
-│   │   │   └── exceptions.py                      OK
-│   │   ├── db/
-│   │   │   ├── session.py                         OK
-│   │   │   └── base.py                            OK
-│   │   ├── models/                                OK (service_order.py: order_number Integer)
-│   │   ├── repositories/                          OK
-│   │   ├── schemas/                                OK (service_order.py: technician_id, order_number int)
-│   │   ├── services/                               OK (service_order_service.py: technician_id, order_number int sem str() residual)
-│   │   └── main.py                                 OK
-│   ├── tests/                                      OK (68/68 passing)
-│   │   ├── conftest.py                             OK (technician_id)
-│   │   ├── test_auth.py                            OK
-│   │   ├── test_companies.py                       OK
-│   │   ├── test_users.py                           OK
-│   │   ├── test_customers.py                       OK
-│   │   └── test_service_orders.py                  OK (technician_id)
-│   ├── alembic/versions/
-│   │   ├── 06d5ab8065eb_initial_schema.py          OK
-│   │   ├── xxxx_expand_customer_address_fields.py  OK
-│   │   └── xxxx_order_number_varchar_to_integer.py OK
-│   ├── .env
-│   ├── .env.example
-│   ├── .env.test                                   OK
-│   ├── pytest.ini                                  OK
-│   ├── alembic.ini
-│   ├── docker-compose.yml
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── requirements.lock
-└── frontend/                                       OK
-    ├── src/
-    │   ├── api/
-    │   │   ├── client.ts                           OK (axios + interceptor JWT)
-    │   │   ├── auth.ts                             OK (tipos derivados de types/api.ts)
-    │   │   ├── customers.ts                        OK
-    │   │   ├── orders.ts                           OK (technician_id + order_number: number corrigidos)
-    │   │   └── users.ts                             OK
-    │   ├── components/
-    │   │   ├── layout/
-    │   │   │   ├── AppLayout.tsx                   OK
-    │   │   │   └── Sidebar.tsx                     OK (full_name corrigido; Header.tsx não existe, funcionalidade está aqui)
-    │   │   └── ui/                                  OK (shadcn/ui components)
-    │   │       └── table-skeleton.tsx               OK (componente reutilizável de skeleton)
-    │   ├── hooks/
-    │   │   ├── useCompany.ts                       OK
-    │   │   ├── useCustomers.ts                     OK
-    │   │   ├── useOrders.ts                        OK
-    │   │   └── useUsers.ts                          OK (full_name correto)
-    │   ├── lib/
-    │   │   └── format.ts                            OK — formatOrderNumber() (novo, Fase 3.3)
-    │   ├── pages/
-    │   │   ├── LoginPage.tsx                       OK
-    │   │   ├── DashboardPage.tsx                   OK
-    │   │   ├── OrdersPage.tsx                      OK (skeleton, empty state, debug logs, technician_id, order_number formatado — todos resolvidos; tabela HTML pura, não shadcn — dívida técnica)
-    │   │   ├── OrderDetailPage.tsx                 OK (não exibe order_number — ver pendências de UX)
-    │   │   ├── CustomersPage.tsx                   OK (skeleton loading + empty state com botão de ação, ambos validados)
-    │   │   ├── UsersPage.tsx                       OK (skeleton loading + empty state com botão de ação, ambos validados)
-    │   │   └── SettingsPage.tsx                    OK (form de perfil testado, salva full_name corretamente)
-    │   ├── router/
-    │   │   └── index.tsx                           OK (ProtectedRoute via accessToken, reativo, sem bugs)
-    │   ├── store/
-    │   │   └── authStore.ts                        OK (tipos derivados de types/api.ts)
-    │   ├── types/
-    │   │   ├── api.ts                              OK — gerado via `npm run generate-types` (openapi-typescript), NUNCA editar manualmente
-    │   │   └── index.ts                            OK — re-exports simplificados (User, AuthResponse, ServiceOrder, etc.)
-    │   └── main.tsx                                 OK (Toaster montado, import React não utilizado removido)
-    ├── index.html
-    ├── vite.config.ts
-    ├── tsconfig.app.json                            OK (ignoreDeprecations: "6.0" adicionado)
-    ├── tsconfig.json                                 OK (baseUrl/paths/ignoreDeprecations duplicado — Fase 3.4, corrige bug do shadcn CLI)
-    ├── components.json                              OK (style: "default")
-    ├── .npmrc                                        OK (legacy-peer-deps=true — Fase 3.4)
-    └── package.json                                 OK (script generate-types adicionado)
-
-## Endpoints Implementados (Fase 1F)
-
-### Auth
-| Método | Rota | Auth |
-|--------|------|------|
-| POST | /api/v1/auth/register | Público |
-| POST | /api/v1/auth/login | Público |
-| POST | /api/v1/auth/refresh | Público |
-| GET | /api/v1/auth/me | Bearer |
-
-### Companies
-| Método | Rota | Auth |
-|--------|------|------|
-| GET | /api/v1/companies/me | CurrentUser |
-| PATCH | /api/v1/companies/me | OwnerOnly |
-
-### Users
-| Método | Rota | Auth |
-|--------|------|------|
-| GET | /api/v1/users | AdminOnly |
-| POST | /api/v1/users | AdminOnly |
-| GET | /api/v1/users/me | CurrentUser |
-| GET | /api/v1/users/{id} | AdminOnly |
-| PATCH | /api/v1/users/{id} | CurrentUser |
-| DELETE | /api/v1/users/{id} | OwnerOnly |
-| PATCH | /api/v1/users/{id}/role | OwnerOnly |
-
-### Customers
-| Método | Rota | Auth |
-|--------|------|------|
-| GET | /api/v1/customers | TechOrAbove |
-| POST | /api/v1/customers | AdminOnly |
-| GET | /api/v1/customers/{id} | TechOrAbove |
-| PATCH | /api/v1/customers/{id} | AdminOnly |
-| DELETE | /api/v1/customers/{id} | AdminOnly |
-
-### Service Orders
-| Método | Rota | Auth |
-|--------|------|------|
-| GET | /api/v1/orders | TechOrAbove |
-| POST | /api/v1/orders | AdminOnly |
-| GET | /api/v1/orders/{id} | TechOrAbove |
-| PATCH | /api/v1/orders/{id} | TechOrAbove |
-| DELETE | /api/v1/orders/{id} | AdminOnly |
-| PATCH | /api/v1/orders/{id}/status | TechOrAbove |
-| GET | /api/v1/orders/{id}/items | TechOrAbove |
-| POST | /api/v1/orders/{id}/items | TechOrAbove |
-| DELETE | /api/v1/orders/{id}/items/{item_id} | TechOrAbove |
-
-## Fase 2A — Concluída
-- Scaffold Vite + React + TypeScript + Tailwind v4 + shadcn/ui
-- Zustand auth store com persist no localStorage
-- Axios client com interceptor JWT + refresh automático
-- React Router v6 com ProtectedRoute
-- TanStack Query v5 configurado
-- LoginPage — layout split, validação, show/hide senha, erro inline
-- AppLayout + Sidebar com NavLink ativo, avatar, logout
-- DashboardPage — cards por status, tabela de OS recentes
-- OrdersPage — tabela paginada, filtros por status
-- OrderDetailPage — dados completos, transição de status, itens com totais
-- CustomersPage — listagem paginada, busca, cadastro, edição, exclusão
-- UsersPage — listagem, criação, troca de role (OwnerOnly), exclusão
-- SettingsPage — dados da empresa, perfil do usuário, assinatura
-- Sonner montado no main.tsx
-
-## Fase 2B — Concluída
-- [x] Formulário de criação de OS na OrdersPage com modal + react-hook-form + zod
-- [x] Validação de formulários com react-hook-form + zod
-- [x] Confirmar que todas as telas funcionam com backend rodando (validação E2E completa)
-- [x] CustomSelect para contornar limitação do Chrome com option estilizado
-- [x] Guard de permissão por role em botões e campos do formulário
-- [x] Correção enum priority: normal em vez de medium
-- [x] Correção campo usuário: full_name em vez de name
-- [x] Correção validator documento cliente: aceitar string vazia como None
-- [x] authStore atualiza user corretamente após login, sem F5 (sessão 2B.2)
-- [x] Skeleton loading nas tabelas — 3 páginas (Users, Customers, Orders) (sessão 2B.3)
-- [x] Empty states com botão de ação direto — 3 páginas (sessão 2B.4)
-- [x] Remover os 3 console.log de debug em CreateOrderModal (OrdersPage.tsx) (sessão 2B.4)
-
-## Fase 3 — Preparação para Deploy (em andamento)
-- [x] Gerar `types/api.ts` via `openapi-typescript` a partir de `/openapi.json` — concluído (sessão Fase 3.1)
-- [x] `assigned_to` no schema → renomeado para `technician_id` em todas as camadas — concluído (sessão Fase 3.2), incluindo correção de bug latente em `update()`
-- [x] `tsconfig.app.json` — `"ignoreDeprecations": "6.0"` adicionado
-- [x] Build de produção do frontend (`npm run build`) validado localmente
-- [x] Suíte de testes pytest (68/68) validada após as mudanças da sessão
-- [x] `hooks/useAuth.ts` vazio — removido (código morto, decisão tomada)
-- [x] `order_number` como `INTEGER` no banco — migration Alembic concluída (sessão Fase 3.3), incluindo correção de bug latente de `str()` residual e formatação `"OS-0001"` no frontend
-- [x] `components.json` — `"style": "default"` aplicado
-- [x] Bug do shadcn CLI (pasta física `@`) — causa raiz corrigida via `tsconfig.json` raiz duplicando `paths` (sessão Fase 3.4)
-- [x] `.npmrc` com `legacy-peer-deps=true` criado
-- [ ] Variáveis de ambiente de produção — backend (Hetzner) e frontend (Vercel): `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, URL da API pública
-- [ ] Configurar CORS no FastAPI para o domínio de produção do frontend (Vercel)
-- [ ] Dockerfile de produção do backend — revisar se o `Dockerfile` atual (dev) precisa de ajustes para deploy (multi-stage build, non-root user, etc.)
-- [ ] Criar `docker-compose.prod.yml` + `Caddyfile` para simular ambiente de produção localmente (backend + postgres + caddy com `tls internal`)
-- [ ] Rodar migrations Alembic em produção (estratégia: manual no primeiro deploy vs. automatizado via CI/CD)
-- [ ] Decidir sobre HTTPS/domínio próprio (Hetzner VPS geralmente exige configuração manual de reverse proxy — Nginx ou Caddy — + certificado TLS)
-- [ ] Testar responsividade mobile (inputs numéricos com `inputMode="decimal"`, `CustomSelect` em telas pequenas, tabela HTML pura do OrdersPage) antes do teste com celular real
-- [ ] Expor ambiente local via Cloudflare Tunnel e testar fluxo completo (login, criar OS, inserir peças/serviços) em celular real, idealmente em Wi-Fi e 4G
-- [ ] Rodar suíte de testes pytest uma última vez antes do primeiro deploy pago no Hetzner, como checkpoint final de regressão
-
-## Decisão de Infraestrutura — Hetzner vs. gratuito
-- Vercel (frontend): gratuito no plano Hobby, suficiente para o estágio atual
-- Hetzner (backend, CX22): ~€4,51/mês, sem tier gratuito — decisão tomada de seguir com Hetzner por simplicidade e previsibilidade (alternativa gratuita considerada: Oracle Cloud Free Tier / Always Free, com setup mais trabalhoso e disponibilidade de recursos variável por região)
-- Estratégia de validação antes de pagar: simular ambiente de produção localmente via Docker Compose + Caddy (`tls internal` para HTTPS local) + Cloudflare Tunnel (exposição pública gratuita, sem limite de sessão como o ngrok free) — validado como suficiente para testar praticamente tudo (build, migrations, CORS, HTTPS, fluxo completo no celular) exceto DNS/TLS reais via Let's Encrypt, que exigem domínio público de fato
+- [x] Gerar `types/api.ts` via `openapi-typescript`
+- [x] `assigned_to` → `technician_id` em todas as camadas
+- [x] Build de produção do frontend validado
+- [x] Suíte pytest (68/68) validada
+- [x] `hooks/useAuth.ts` vazio removido
+- [x] `order_number` como `INTEGER` — migration concluída
+- [x] Bug do shadcn CLI corrigido
+- [x] `.npmrc` com `legacy-peer-deps=true`
+- [x] **CORS de produção configurado e validado** (bug `NoDecode` resolvido)
+- [x] **Dockerfile de produção** — multi-stage, non-root, validado (bug `email-validator` no lock resolvido)
+- [x] **`docker-compose.prod.yml` + Caddyfile** — validado (múltiplos bugs de TLS/`auto_https` resolvidos)
+- [x] **Migrations rodando em produção** — validadas do zero (banco vazio → schema completo)
+- [x] **Teste mobile via Cloudflare Tunnel** — validado, incluindo fluxo funcional completo (login, criar cliente, criar OS)
+- [ ] **Corrigir responsividade mobile** (viewport/CSS) — pendência ativa, não iniciada
+- [ ] Variáveis de ambiente de produção reais — Hetzner (`DATABASE_URL`, `SECRET_KEY` forte gerado via `openssl rand -hex 32` — o atual no `.env` é um placeholder curto, **não pode ir para produção**) e Vercel (URL pública da API)
+- [ ] Rodar pytest uma última vez como checkpoint final antes do primeiro deploy pago no Hetzner
 
 ## Decisões Pendentes / A Revisar (baixa prioridade, pós-deploy)
-- [ ] Avaliar soft delete (deleted_at) vs is_active
-- [ ] Avaliar RefreshToken model para blacklist
-- [ ] Avaliar Checklist/ChecklistItem model (fase futura)
-- [ ] Avaliar computed_field no config.py para DATABASE_URL automático
-- [ ] Técnico autônomo: documentar no onboarding que deve se cadastrar como owner, sugerindo placeholder "Ex: João Silva Refrigeração" no campo empresa
-- [ ] Considerar refatorar `OrdersPage.tsx` para usar componentes shadcn `<Table>` (como Users/Customers) em vez de `<table>` HTML pura com estilos inline — dívida técnica de consistência, não bloqueante para deploy
-- [ ] Rodar busca por `console.log` esquecidos em todo o projeto (`Get-ChildItem -Path src -Recurse -Include *.tsx,*.ts | Select-String -Pattern "console.log"`)
-- [ ] Testar UsersPage com usuário técnico logado, para confirmar que botão "Novo Usuário" some corretamente (empty state)
-- [ ] Considerar code-splitting por rota (`React.lazy`) — bundle de produção atual ~211kB gzip, aviso do Vite sobre chunk >500kB, não urgente mas vale revisitar antes do teste em 4G
-- [ ] Considerar simplificar fluxo de login para usar o `user` já retornado em `AuthResponse`, eliminando chamada extra a `/auth/me` (descoberto ao tipar corretamente o schema, ainda não implementado)
-- [ ] Refatorar `get_order` endpoint para não construir `ServiceOrderResponse` manualmente campo a campo — reduz risco de divergência de nomes como a que geramos com `assigned_to`/`technician_id`
-- [ ] Avaliar exibir `order_number` (formatado como `OS-0001`) no cabeçalho de `OrderDetailPage.tsx` — hoje só a listagem mostra o número da OS
-- [ ] Considerar aliases de tipo (como já feito em `authStore.ts`/`auth.ts` na Fase 3.1) também em `src/api/orders.ts`, apontando direto para `types/api.ts` — evitaria o mesmo tipo de divergência manual que já causou 2 bugs (`name`/`full_name` e `order_number: string` desatualizado)
+*(lista herdada de sessões anteriores, sem mudanças — ver seção completa no histórico)*
+- Soft delete vs `is_active`, RefreshToken blacklist, Checklist/ChecklistItem futuro, `computed_field` para `DATABASE_URL`, refatorar `OrdersPage.tsx` para shadcn `<Table>`, buscar `console.log` residuais, testar UsersPage com técnico logado, code-splitting por rota, simplificar login eliminando `/auth/me` extra, refatorar `get_order` manual, exibir `order_number` no header de `OrderDetailPage`, aliases de tipo em `src/api/orders.ts`.
+
+---
+
+## Próximo Passo Recomendado
+
+**Corrigir a responsividade mobile antes de avançar para Hetzner/Vercel.**
+
+Motivo: a infraestrutura (Docker, Caddy, túnel, banco, CORS) está agora comprovadamente sólida — todo o trabalho pesado e imprevisível dessa sessão foi justamente ali. Responsividade é um problema **isolado e de escopo pequeno** (provavelmente uma meta tag ou um container com largura fixa), rápido de corrigir e validar com o mesmo setup de túnel que já está funcionando. Resolver isso agora, enquanto o ambiente de teste mobile está "quente" e validado, evita ter que remontar toda a infraestrutura de teste (Docker + 2 túneis) de novo mais tarde só para essa validação visual.
+
+Só depois disso faz sentido seguir para: gerar `SECRET_KEY` forte, configurar variáveis de ambiente reais do Hetzner/Vercel, e rodar o checkpoint final de pytest antes do primeiro deploy pago.
