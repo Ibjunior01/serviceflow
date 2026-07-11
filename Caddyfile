@@ -1,6 +1,14 @@
-localhost {
-    tls internal
+{
+	auto_https off
+}
 
-    reverse_proxy /api/* backend:8000
-    reverse_proxy /health backend:8000
+localhost {
+	tls internal
+	reverse_proxy /api/* backend:8000
+	reverse_proxy /health backend:8000
+}
+
+:80 {
+	reverse_proxy /api/* backend:8000
+	reverse_proxy /health backend:8000
 }
