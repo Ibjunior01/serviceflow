@@ -77,8 +77,8 @@ export default function DashboardPage() {
                 </p>
             </div>
 
-            {/* Stat cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
+            {/* Stat cards — 2 colunas em mobile, 4 a partir de sm (640px) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
                 {STAT_STATUSES.map((s) => (
                     <div
                         key={s.key}
@@ -136,64 +136,70 @@ export default function DashboardPage() {
                         </button>
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ background: '#f8fafc' }}>
-                                {['Nº', 'Título', 'Cliente', 'Prioridade', 'Status', 'Data'].map((h) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {recent.map((order, i) => (
-                                <tr
-                                    key={order.id}
-                                    onClick={() => navigate(`/orders/${order.id}`)}
-                                    style={{
-                                        borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.1s',
-                                    }}
-                                    onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#f8fafc' }}
-                                    onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
-                                >
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
-                                        #{order.order_number}
-                                    </td>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {order.title}
-                                    </td>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {order.customer_name ?? '—'}
-                                    </td>
-                                    <td style={{ padding: '12px 16px' }}>
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: PRIORITY_COLOR[order.priority], fontWeight: 500 }}>
-                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLOR[order.priority], flexShrink: 0 }} />
-                                            {PRIORITY_LABEL[order.priority]}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: '12px 16px' }}>
-                                        <span style={{
-                                            display: 'inline-block',
-                                            padding: '3px 8px',
-                                            borderRadius: '6px',
-                                            fontSize: '12px',
-                                            fontWeight: 500,
-                                            background: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).bg,
-                                            color: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).text,
-                                        }}>
-                                            {STATUS_LABEL[order.status]}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                        {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                                    </td>
+                    // Wrapper com scroll horizontal contido — a tabela pode rolar dentro do
+                    // card sem nunca empurrar a largura da página inteira (o que causava o
+                    // "scroll pra ver o último indicador" reportado).
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                    {['Nº', 'Título', 'Cliente', 'Prioridade', 'Status', 'Data'].map((h) => (
+                                        <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                            {h}
+                                        </th>
+                                    ))}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {recent.map((order, i) => (
+                                    <tr
+                                        key={order.id}
+                                        onClick={() => navigate(`/orders/${order.id}`)}
+                                        style={{
+                                            borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.1s',
+                                        }}
+                                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#f8fafc' }}
+                                        onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
+                                    >
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                            #{order.order_number}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {order.title}
+                                        </td>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {order.customer_name ?? '—'}
+                                        </td>
+                                        <td style={{ padding: '12px 16px' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: PRIORITY_COLOR[order.priority], fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLOR[order.priority], flexShrink: 0 }} />
+                                                {PRIORITY_LABEL[order.priority]}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px 16px' }}>
+                                            <span style={{
+                                                display: 'inline-block',
+                                                padding: '3px 8px',
+                                                borderRadius: '6px',
+                                                fontSize: '12px',
+                                                fontWeight: 500,
+                                                whiteSpace: 'nowrap',
+                                                background: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).bg,
+                                                color: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).text,
+                                            }}>
+                                                {STATUS_LABEL[order.status]}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px 16px', fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                            {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
         </div>

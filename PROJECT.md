@@ -2,7 +2,7 @@
 
 ## Sessão Atual
 **Fase:** 3 — Preparação para Deploy (Backend + Frontend)
-**Status:** Ambiente de produção simulado localmente (Docker Compose + Caddy + Cloudflare Tunnel) **validado de ponta a ponta**, incluindo teste funcional completo em celular real (login, criar cliente, criar OS). Falta apenas: corrigir responsividade mobile, configurar variáveis de ambiente reais do Hetzner/Vercel, e rodar o checkpoint final de pytest antes do primeiro deploy pago.
+**Status:** Ambiente de produção simulado localmente (Docker Compose + Caddy + Cloudflare Tunnel) **validado de ponta a ponta**, incluindo teste funcional completo em celular real (login, criar cliente, criar OS). **Responsividade mobile corrigida e validada** em todas as telas principais. Falta apenas: configurar variáveis de ambiente reais do Hetzner/Vercel e rodar o checkpoint final de pytest antes do primeiro deploy pago.
 
 ## Progresso das Fases
 
@@ -11,7 +11,7 @@
 | 1A–1G | Backend completo (estrutura, models, schemas, auth, CRUD, endpoints, testes) | ✅ Concluída |
 | 2A | Frontend React + Vite + Tailwind — todas as telas | ✅ Concluída |
 | 2B | Polimento de UX + Preparação para Deploy | ✅ Concluída |
-| 3 | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento — infraestrutura local 100% validada |
+| 3 | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento — infraestrutura local e responsividade 100% validadas |
 
 ## Decisões de Arquitetura (backend) — inalteradas desde sessões anteriores
 - Async engine (asyncpg), API versionada em `/api/v1`, Settings via pydantic-settings com validação no boot
@@ -23,155 +23,39 @@
 
 ---
 
-## Sessão Fase 3.5 — Deploy local completo + validação mobile (11/07/2026)
+## Sessão Fase 3.6 — Correção de responsividade mobile (12–14/07/2026)
 
-Sessão longa e trabalhosa, mas terminou com o ambiente de produção simulado 100% funcional, incluindo teste real em celular. Documentando os bugs encontrados em detalhe porque vários têm causas raiz não óbvias — vale a leitura antes de mexer em Caddy/Docker/Vite de novo.
+Pendência aberta na sessão anterior (3.5), agora fechada. Padrão raiz identificado no início: o frontend usa `style={{}}` inline em quase todo componente, e inline style sempre vence classe CSS — então qualquer largura/grid fixo em `style` nunca respondia a media query nenhuma, mesmo quando o Tailwind estava configurado corretamente.
 
-### 1. CORS em produção — bug `NoDecode`
+### 1. Diagnóstico inicial — viewport e Tailwind descartados como causa
 
-**Sintoma:** `pydantic_settings.exceptions.SettingsError` / `JSONDecodeError` ao subir o backend com `CORS_ORIGINS` definido como string separada por vírgula no `.env`.
+- `index.html` já tinha `<meta name="viewport" content="width=device-width, initial-scale=1.0">` correto desde o início.
+- Tailwind v4 confirmado configurado corretamente: plugin `@tailwindcss/vite` no `vite.config.ts`, `@import "tailwindcss"` no `src/index.css`. Não havia (nem precisa haver, no v4) `tailwind.config.js`.
+- **Armadilha encontrada:** um Service Worker fantasma ficou registrado em `localhost:5173` (origem não identificada com certeza — possivelmente sobra de outro projeto Vite testado na mesma porta) servindo uma versão em cache do app. Isso mascarou todas as correções de CSS por várias rodadas de teste — mudanças no código não apareciam na aba normal do Chrome, só em aba anônima. **Sintoma característico:** funciona em aba anônima, não funciona em aba normal, mesmo com "Disable cache" do DevTools marcado (esse não desliga Service Worker). **Correção pendente, não crítica:** `DevTools → Application → Service Workers → Unregister` + `Clear site data`. Enquanto não resolvido, **sempre validar mudanças de CSS/layout em aba anônima**.
 
-**Causa:** o pydantic-settings tenta fazer `json.loads()` automaticamente em qualquer campo `list[...]` lido do `.env`, antes mesmo do `field_validator` rodar. Uma string tipo `"http://a.com,http://b.com"` não é JSON válido.
+### 2. `LoginPage.tsx` — painel de branding fixo em 420px
 
-**Correção aplicada em `app/core/config.py`:**
-```python
-from typing import Annotated
-from pydantic_settings import BaseSettings, NoDecode
-from pydantic import field_validator
+Painel esquerdo (dark, marketing) usava `flex: '0 0 420px'` inline sem media query — sozinho já estourava a largura de qualquer celular. **Correção:** painel movido para `className="hidden md:flex md:flex-none md:w-[420px] ..."` (Tailwind), escondendo completamente abaixo de 768px — padrão comum em SaaS mobile (Linear, Stripe, etc.), foco total no formulário em telas pequenas. Padding do painel direito também migrado de `style` fixo para `className="px-4 py-8 md:px-12 md:py-12"`.
 
-class Settings(BaseSettings):
-    ...
-    CORS_ORIGINS: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+### 3. `Sidebar.tsx` + `AppLayout.tsx` — menu lateral fixo, sem navegação mobile
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
-```
+Sidebar era `width: '220px'` fixo, sempre visível, sem nenhum jeito de esconder/mostrar. **Correção:** convertida para drawer deslizante — escondida por padrão em mobile (`-translate-x-full`), abre com overlay via `AppLayout` (novo estado `sidebarOpen` + botão hambúrguer numa barra superior nova, só visível em mobile). Fecha automaticamente ao clicar num link ou no overlay. Em desktop (`md:` +) permanece fixa, comportamento idêntico ao original.
 
-`Annotated[list[str], NoDecode]` desliga o parsing automático de JSON só nesse campo, deixando o `field_validator` fazer o `.split(",")` normalmente.
+**Bug secundário encontrado neste componente:** `h-screen` (`100vh`) cortava o rodapé do menu (botão de logout) no Safari iOS quando a barra de endereço está visível, porque `100vh` no Safari mobile é calculado com a barra retraída. **Corrigido** trocando para `h-dvh` (dynamic viewport height, suportado nativamente pelo Tailwind v4), que se ajusta automaticamente à barra do navegador aparecendo/sumindo.
 
-**`main.py`** — middleware adicionado logo após `app = FastAPI(...)`, antes dos exception handlers e do `include_router`:
-```python
-from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
+### 4. Padrão recorrente encontrado e corrigido em 4 páginas: grids fixos de 2/4 colunas + tabelas sem scroll contido
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-`allow_credentials=True` é obrigatório (JWT via header `Authorization`), o que implica que `CORS_ORIGINS` nunca pode conter `"*"` — sempre domínios explícitos.
+Auditoria sistemática via `Select-String "gridTemplateColumns|width: '\d|flex: '0"` em todo `src/` encontrou o mesmo padrão repetido:
 
-**Bug secundário corrigido:** `config.py` tinha `SECRET_KEY: str` declarado duas vezes (linhas duplicadas) — inofensivo (Python só usa a última), mas removido por limpeza.
+- **`DashboardPage.tsx`**: grid de stat cards `repeat(4, 1fr)` fixo → `className="grid grid-cols-2 sm:grid-cols-4 gap-4"`. Tabela "Ordens recentes" sem wrapper de scroll → envolvida em `<div style={{ overflowX: 'auto' }}>`.
+- **`OrderDetailPage.tsx`**: grid de cards (Cliente/Técnico/Datas/Total) `1fr 1fr` fixo → `grid-cols-1 sm:grid-cols-2`. Tabela de itens da ordem → mesmo tratamento de `overflowX: auto`. Header (título + botão "Alterar status") ganhou `flexWrap: 'wrap'` para não espremer em telas estreitas.
+- **`OrdersPage.tsx`**: grid do modal de criação (Prioridade + Agendamento) `1fr 1fr` fixo → `grid-cols-1 sm:grid-cols-2`. As duas tabelas (skeleton de loading e dados reais) → `overflowX: auto`. Modal ganhou `maxHeight: calc(100vh - 32px)` + `overflowY: auto` (evita corte em celulares pequenos com muitos campos). Header da página e paginação ganharam `flexWrap: 'wrap'`.
 
-### 2. `Dockerfile.prod` — multi-stage build
+**Padrão de correção consistente em todos os casos:** grids de N colunas fixas viram Tailwind responsivo (`grid-cols-1 sm:grid-cols-2` ou `grid-cols-2 sm:grid-cols-4`, conforme o caso); tabelas ganham wrapper `overflow-x-auto` — deixando a tabela rolar **dentro** do próprio card, sem nunca empurrar a largura da página inteira (era a causa do "preciso passar a tela pra ver o último indicador" relatado no teste mobile).
 
-Criado `backend/Dockerfile.prod` (mantendo o `Dockerfile` de dev intacto, separado):
-- **Stage `builder`**: `python:3.14-slim` + `gcc`/`libpq-dev` (compilação de `asyncpg`/`bcrypt`) → `pip install --user -r requirements.lock`
-- **Stage `runtime`**: só `libpq5` (lib de runtime, sem headers de compilação) + usuário non-root (`appuser`) + `COPY --from=builder /root/.local /home/appuser/.local`
-- `PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`, sem `--reload`
-- `.dockerignore` criado (`.venv/`, `__pycache__/`, `.env`, `tests/`, `.git/`, etc.)
+### 5. Validação final
 
-**Bug encontrado:** build falhava com `ModuleNotFoundError: No module named 'email_validator'` — `requirements.lock` estava desatualizado em relação ao `requirements.txt` (dependência transitiva do `EmailStr` do Pydantic nunca foi propagada pro lock). **Corrigido** com `pip freeze > requirements.lock` no ambiente local, seguido de `docker build --no-cache` (build cacheado não pegava o lock novo automaticamente na primeira tentativa).
-
-**Validado:** container sobe standalone, `/health` responde 200 com `{"status":"ok"}`.
-
-### 3. `docker-compose.prod.yml` + `Caddyfile` — a parte mais difícil da sessão
-
-**Estrutura final do compose** (raiz do projeto): serviços `postgres` (16-alpine, healthcheck via `pg_isready -U ... -d ...` — precisa do `-d <database>`, senão gera erro `FATAL: database "user" does not exist` em loop, porque o Postgres tenta abrir um banco com o mesmo nome do usuário por padrão), `backend` (usa `Dockerfile.prod`, `DATABASE_URL` sobrescrito via `environment:` apontando para `postgres:5432` — dentro da rede Docker, serviços se enxergam pelo nome, nunca por `localhost`), `caddy` (portas 80/443 publicadas, único serviço realmente exposto ao host Windows).
-
-**Pegadinha de variáveis:** `${POSTGRES_USER}` etc. usados diretamente no YAML do compose (fora de `env_file:`) exigem um `.env` **na raiz do projeto** (onde o `docker compose` é executado) — different mechanism do `env_file:` dos serviços, que injeta variáveis *dentro* do container. Os dois são necessários e não se substituem.
-
-**Caddyfile — histórico de bugs, do mais simples ao mais sutil:**
-1. Typo `:433` em vez de `:443` — TLS falhava silenciosamente porque a porta configurada não é a publicada no compose.
-2. Bloco `localhost { }` só responde a requisições com `Host: localhost` — ao testar via túnel (`Host: algo.trycloudflare.com`), o Caddy não casava a config e retornava 200 vazio (`Content-Length: 0`). Trocado temporariamente para `:443 { }` (coringa).
-3. Com `:443 { }` sem hostname declarado, `tls internal` **nunca emite o certificado de folha** (só a CA raiz) — handshake TLS quebra com `tls: internal error` tanto local quanto via túnel. Diagnosticado inspecionando `/data/caddy/certificates` (inexistente) dentro do container.
-4. **Causa raiz de fundo, corrigida:** em vez de brigar com certificado dinâmico para hostname coringa, a perna "túnel → Caddy local" foi movida para **HTTP puro (porta 80)** — a criptografia real (túnel → celular) já é garantida pela própria Cloudflare na borda; a perna interna nunca sai da máquina/rede Docker. Isso elimina a necessidade de TLS válido internamente.
-5. Com bloco `:80 { }` adicionado, o Caddy aplicava **redirect automático HTTP→HTTPS** mesmo assim (`308 Permanent Redirect`), porque `auto_https` é ligado globalmente por padrão sempre que existe qualquer bloco HTTPS na config (o `localhost { tls internal }` mantido para testes locais). **Correção final:**
-```
-{
-    auto_https off
-}
-
-localhost {
-    tls internal
-    reverse_proxy /api/* backend:8000
-    reverse_proxy /health backend:8000
-}
-
-:80 {
-    reverse_proxy /api/* backend:8000
-    reverse_proxy /health backend:8000
-}
-```
-`auto_https off` desliga tanto a emissão automática de certificado quanto os redirects — cada bloco de site passa a se comportar exatamente como declarado.
-
-**Falsas pistas investigadas e descartadas durante o diagnóstico** (documentando para não repetir): conflito de porta com `wslrelay` (processo legítimo do Docker Desktop/WSL2, não era a causa), dessincronia de relógio Windows↔WSL2 (relógios estavam corretos, erro de cálculo de fuso horário meu), múltiplos processos `cloudflared` concorrentes (só havia um). O log `Failed to initialize DNS local resolver` do `cloudflared` é **cosmético** e aparece sempre, mesmo em túneis saudáveis — não indica problema.
-
-**Comando de teste local que expôs cada bug:** `curl.exe -kv https://localhost/health` (headers completos) foi essencial para diferenciar "conexão recusada" de "TLS handshake falhou" de "200 vazio por Host mismatch".
-
-### 4. Migrations em produção — validadas do zero
-
-Com `docker compose down -v` (reset completo de volumes, incluindo `postgres_data`), confirmado banco genuinamente vazio (`\dt` → "Did not find any relations"). Rodado:
-```powershell
-docker compose -f docker-compose.prod.yml exec backend python -m alembic upgrade head
-```
-As 3 revisions aplicaram em sequência sem erro; `\dt` depois confirmou as 7 tabelas esperadas (incluindo `alembic_version`). **Fluxo completo validado**: banco vazio → migrations → registro de usuário (`POST /auth/register`, 201) → login (`POST /auth/login`, 200) — tudo dentro do ambiente containerizado, via porta 80 do Caddy.
-
-### 5. Cloudflare Tunnel — setup e pegadinhas
-
-- `winget install --id Cloudflare.cloudflared` instala mas não atualiza o PATH da sessão atual do PowerShell — precisa reabrir o terminal, ou (nesse caso) usar o caminho completo: `C:\Program Files (x86)\cloudflared\cloudflared.exe`.
-- Comando usado (perna backend): `& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --url http://localhost:80` (HTTP puro, ver seção Caddyfile acima).
-- URLs de "quick tunnel" são **efêmeras** — só existem enquanto aquele processo `cloudflared` específico está rodando; fechar o terminal mata a URL.
-- **`Error 1033` / `Error 502`**: sempre investigar primeiro se o processo `cloudflared` ainda está vivo e se os containers (`docker compose ps`) ainda estão `Up` — várias vezes o Caddy tinha caído silenciosamente depois de comandos `up --build <service>` parciais sem `-d`.
-
-### 6. Frontend — proxy do Vite + `allowedHosts`
-
-`client.ts` usa `baseURL: '/api/v1'` (relativo) — depende do proxy do Vite (`vite.config.ts`) para rotear até o backend. Como o backend **não publica porta pro host** nesse setup (só o Caddy publica 80/443), o proxy precisa apontar para o Caddy, não direto pro backend:
-```typescript
-server: {
-    proxy: {
-        '/api': { target: 'http://127.0.0.1:80', changeOrigin: true },
-    },
-    allowedHosts: ['.trycloudflare.com'],
-}
-```
-`allowedHosts` é necessário porque o Vite 5+ bloqueia por padrão requisições com `Host` header de domínios externos não listados (proteção de segurança nova) — sem isso, erro `Blocked request. This host ... is not allowed`. O coringa `.trycloudflare.com` evita precisar editar a cada novo túnel gerado (nome aleatório muda sempre).
-
-**Importante:** como o proxy roda no processo Node do Vite (server-side), não há CORS envolvido nesse caminho — a chamada nunca é cross-origin do ponto de vista do navegador. `CORS_ORIGINS` do backend não precisou ser tocado para o teste mobile funcionar.
-
-Segundo túnel, dedicado ao frontend: `cloudflared tunnel --url http://localhost:5173` (depois de rodar `npm run dev -- --host` para o Vite escutar em todas as interfaces).
-
-### 7. Bug de ambiente duplicado — duas bases de dados diferentes
-
-**Sintoma muito confuso:** login funcionava perfeitamente via `POST /api/v1/auth/login` batendo em `127.0.0.1:8000/docs`, mas o mesmo usuário/senha dava "e-mail ou senha inválidos" no frontend (via túnel).
-
-**Causa raiz:** existiam **dois Postgres diferentes** em jogo:
-1. Um container antigo (`backend-db-1`, de projeto/sessão anterior, publicando `5432` pro Windows) — alcançável via `localhost:5432`, usado por qualquer processo backend rodando **fora** do Docker (ex.: um `uvicorn --reload` solto).
-2. O Postgres **do `docker-compose.prod.yml`** — sem porta publicada, acessível só de dentro da rede Docker via `postgres:5432` — é o que o backend containerizado (e, por consequência, o frontend via Caddy/túnel) realmente usa.
-
-Testar em `127.0.0.1:8000/docs` sempre bateu no banco errado (antigo/dev), gerando a falsa sensação de que "funciona ali mas não no app". **Lição:** ao testar múltiplos ambientes (dev solto vs. Docker Compose) na mesma máquina, sempre confirmar explicitamente qual porta/processo está respondendo antes de comparar resultados.
-
-**Resolução:** usuário `mobile@service.com` / `Senha123` registrado **direto no ambiente containerizado** via `Invoke-RestMethod` contra `http://localhost/api/v1/auth/register` (porta 80, através do Caddy) — esse sim compartilhado com o frontend.
-
-### 8. Teste mobile completo — validado com sucesso ✅
-
-No celular (Safari, via túnel do frontend), fluxo completo testado e confirmado:
-1. Login com `mobile@service.com` — sucesso.
-2. Criação de cliente ("Celteste") — sucesso.
-3. Criação de OS ("Teste cel", vinculada ao cliente criado) — sucesso (havia dado erro `customer_id: Field required` na primeira tentativa, por tentar criar OS antes de existir qualquer cliente cadastrado — resolvido cadastrando o cliente primeiro).
-
-Confirmado também via desktop (`http://localhost:5173`), mesma base de dados compartilhada: Dashboard mostrando a OS criada pelo celular, listagem de Ordens (`OS-0001`, formatação correta), listagem de Clientes, listagem de Usuários — tudo consistente.
-
-### 9. Pendência conhecida, não resolvida ainda
-
-**Responsividade mobile:** a tela de login (e possivelmente outras) aparece cortada no celular, exigindo scroll horizontal / zoom manual. Ainda não diagnosticada a fundo — hipóteses não testadas: meta tag de viewport ausente no `index.html`, ou largura fixa em algum container de `LoginPage.tsx`. **Não bloqueou a validação funcional** (login e CRUD funcionaram apesar do layout ruim), mas precisa ser corrigida antes de considerar o app pronto para uso real em campo.
+Testado em celular real (Safari, via túnel do frontend) e em DevTools (aba anônima): Dashboard, Ordens de Serviço (lista + modal + detalhe), Configurações, menu lateral — todos renderizando em coluna única, sem corte nem scroll horizontal indesejado, botão de logout visível, hambúrguer funcional. **Responsividade mobile considerada fechada.**
 
 ---
 
@@ -190,20 +74,28 @@ Confirmado também via desktop (`http://localhost:5173`), mesma base de dados co
 - [x] **`docker-compose.prod.yml` + Caddyfile** — validado (múltiplos bugs de TLS/`auto_https` resolvidos)
 - [x] **Migrations rodando em produção** — validadas do zero (banco vazio → schema completo)
 - [x] **Teste mobile via Cloudflare Tunnel** — validado, incluindo fluxo funcional completo (login, criar cliente, criar OS)
-- [ ] **Corrigir responsividade mobile** (viewport/CSS) — pendência ativa, não iniciada
+- [x] **Responsividade mobile** — corrigida e validada em LoginPage, Sidebar/AppLayout, DashboardPage, OrderDetailPage, OrdersPage
 - [ ] Variáveis de ambiente de produção reais — Hetzner (`DATABASE_URL`, `SECRET_KEY` forte gerado via `openssl rand -hex 32` — o atual no `.env` é um placeholder curto, **não pode ir para produção**) e Vercel (URL pública da API)
 - [ ] Rodar pytest uma última vez como checkpoint final antes do primeiro deploy pago no Hetzner
 
 ## Decisões Pendentes / A Revisar (baixa prioridade, pós-deploy)
-*(lista herdada de sessões anteriores, sem mudanças — ver seção completa no histórico)*
+*(lista herdada de sessões anteriores + 1 item novo desta sessão)*
 - Soft delete vs `is_active`, RefreshToken blacklist, Checklist/ChecklistItem futuro, `computed_field` para `DATABASE_URL`, refatorar `OrdersPage.tsx` para shadcn `<Table>`, buscar `console.log` residuais, testar UsersPage com técnico logado, code-splitting por rota, simplificar login eliminando `/auth/me` extra, refatorar `get_order` manual, exibir `order_number` no header de `OrderDetailPage`, aliases de tipo em `src/api/orders.ts`.
+- **Novo:** investigar e remover o Service Worker fantasma registrado em `localhost:5173` (`Application → Service Workers → Unregister` + `Clear site data`) — não bloqueia nada, mas continua mascarando testes futuros de CSS/layout na aba normal do navegador até ser removido.
+- **Novo (opcional):** migrar `LoginPage.tsx`, `Sidebar.tsx` e `AppLayout.tsx` de `style={{}}` inline para Tailwind puro, por consistência com o resto do codebase (que já usa shadcn/Tailwind) — não é urgente, mas evita o mesmo tipo de bug de especificidade CSS reaparecer em telas futuras.
+- **Novo (opcional):** considerar esconder colunas menos críticas das tabelas (ex.: "Data") em mobile via `hidden sm:table-cell`, reduzindo a necessidade de scroll horizontal — decisão de produto, não implementado nesta sessão.
 
 ---
 
 ## Próximo Passo Recomendado
 
-**Corrigir a responsividade mobile antes de avançar para Hetzner/Vercel.**
+**Configurar variáveis de ambiente reais de produção (Hetzner + Vercel) e rodar o checkpoint final de pytest.**
 
-Motivo: a infraestrutura (Docker, Caddy, túnel, banco, CORS) está agora comprovadamente sólida — todo o trabalho pesado e imprevisível dessa sessão foi justamente ali. Responsividade é um problema **isolado e de escopo pequeno** (provavelmente uma meta tag ou um container com largura fixa), rápido de corrigir e validar com o mesmo setup de túnel que já está funcionando. Resolver isso agora, enquanto o ambiente de teste mobile está "quente" e validado, evita ter que remontar toda a infraestrutura de teste (Docker + 2 túneis) de novo mais tarde só para essa validação visual.
+Motivo: com a infraestrutura local (Docker, Caddy, túnel, banco, CORS) e a responsividade mobile agora comprovadamente sólidas, os únicos itens restantes antes do primeiro deploy pago são de configuração, não de código:
 
-Só depois disso faz sentido seguir para: gerar `SECRET_KEY` forte, configurar variáveis de ambiente reais do Hetzner/Vercel, e rodar o checkpoint final de pytest antes do primeiro deploy pago.
+1. Gerar `SECRET_KEY` forte: `openssl rand -hex 32` (o valor atual no `.env` é um placeholder curto e **não pode** ir para produção).
+2. Definir variáveis de ambiente reais no Hetzner: `DATABASE_URL` (apontando para o Postgres de produção), `SECRET_KEY` (gerada no passo 1), `CORS_ORIGINS` (domínio real do Vercel, não `localhost`).
+3. Definir variável de ambiente no Vercel: URL pública da API no Hetzner (substituindo o proxy local do Vite, que só existe em dev).
+4. Rodar a suíte pytest (68/68) uma última vez como checkpoint final, antes de comprometer a infraestrutura paga.
+
+Só depois desses 4 passos faz sentido seguir para o primeiro deploy real no Hetzner (backend) e Vercel (frontend).

@@ -120,9 +120,10 @@ export default function OrderDetailPage() {
                 <span style={{ color: '#0f172a' }}>#{order.order_number}</span>
             </div>
 
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', gap: '16px' }}>
-                <div style={{ flex: 1 }}>
+            {/* Header — flexWrap garante que o botão "Alterar status" quebre pra
+                linha de baixo em vez de espremer o título em telas estreitas */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <h1 style={{ fontSize: '20px', fontWeight: 600, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
                             {order.title}
@@ -134,7 +135,7 @@ export default function OrderDetailPage() {
                             {STATUS_LABEL[order.status] ?? order.status}
                         </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', flexWrap: 'wrap' }}>
                         <span style={{ color: PRIORITY_COLOR[order.priority] ?? '#64748b', fontWeight: 500 }}>
                             ● {PRIORITY_LABEL[order.priority] ?? order.priority}
                         </span>
@@ -164,7 +165,7 @@ export default function OrderDetailPage() {
                             <div style={{
                                 position: 'absolute', right: 0, top: '42px', zIndex: 10,
                                 background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px',
-                                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: '180px', overflow: 'hidden',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: '180px', maxWidth: 'min(180px, calc(100vw - 32px))', overflow: 'hidden',
                             }}>
                                 {nextStatuses.map((s) => (
                                     <button
@@ -188,8 +189,8 @@ export default function OrderDetailPage() {
                 )}
             </div>
 
-            {/* Cards de info */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+            {/* Cards de info — 1 coluna em mobile, 2 a partir de sm (640px) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                 {/* Cliente */}
                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px 20px' }}>
                     <p style={{ fontSize: '11px', fontWeight: 500, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px' }}>
@@ -264,27 +265,31 @@ export default function OrderDetailPage() {
                         Nenhum item adicionado.
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ background: '#f8fafc' }}>
-                                {['Descrição', 'Qtd', 'Preço unit.', 'Total'].map((h) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Descrição' ? 'left' : 'right', fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {items.map((item, i) => (
-                                <tr key={item.id} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a' }}>{item.description}</td>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', textAlign: 'right' }}>{item.quantity}</td>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
-                                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', fontWeight: 500, textAlign: 'right' }}>{formatCurrency(item.total_price)}</td>
+                    // Scroll horizontal contido — a tabela de itens rola dentro do
+                    // próprio card se necessário, sem empurrar a largura da página.
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                    {['Descrição', 'Qtd', 'Preço unit.', 'Total'].map((h) => (
+                                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Descrição' ? 'left' : 'right', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                            {h}
+                                        </th>
+                                    ))}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {items.map((item, i) => (
+                                    <tr key={item.id} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', whiteSpace: 'nowrap' }}>{item.description}</td>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', textAlign: 'right', whiteSpace: 'nowrap' }}>{item.quantity}</td>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', textAlign: 'right', whiteSpace: 'nowrap' }}>{formatCurrency(item.unit_price)}</td>
+                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>{formatCurrency(item.total_price)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
         </div>

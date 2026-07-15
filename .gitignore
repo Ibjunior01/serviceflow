@@ -1,6 +1,7 @@
 # Segredos
 .env
 !.env.example
+.env.prod
 
 # Cache Python
 __pycache__/

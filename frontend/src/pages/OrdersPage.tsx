@@ -236,7 +236,8 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '520px',
-                    boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+                    maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
                 }}
             >
                 <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -281,7 +282,8 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
                             />
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        {/* Prioridade + Agendamento — 1 coluna em mobile, 2 a partir de sm (640px) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label style={labelStyle}>Prioridade *</label>
                                 <select {...register('priority')} style={fieldStyle}>
@@ -380,7 +382,8 @@ export default function OrdersPage() {
                 <CreateOrderModal onClose={() => setShowCreateModal(false)} />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+            {/* Header — flexWrap evita que o botão "Nova OS" espreme o título em telas estreitas */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                     <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#0f172a', margin: '0 0 4px', letterSpacing: '-0.025em' }}>
                         Ordens de Serviço
@@ -426,28 +429,32 @@ export default function OrdersPage() {
 
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                 {isLoading ? (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                {['Nº', 'Título', 'Cliente', 'Técnico', 'Prioridade', 'Status', 'Data'].map((h) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {Array.from({ length: 8 }).map((_, i) => (
-                                <tr key={i} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
-                                    {Array.from({ length: 7 }).map((_, j) => (
-                                        <td key={j} style={{ padding: '12px 16px' }}>
-                                            <Skeleton className="h-4 w-full" />
-                                        </td>
+                    // Scroll horizontal contido também no skeleton, pra não "pular"
+                    // de layout assim que os dados reais chegarem.
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                    {['Nº', 'Título', 'Cliente', 'Técnico', 'Prioridade', 'Status', 'Data'].map((h) => (
+                                        <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                            {h}
+                                        </th>
                                     ))}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <tr key={i} style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                                        {Array.from({ length: 7 }).map((_, j) => (
+                                            <td key={j} style={{ padding: '12px 16px' }}>
+                                                <Skeleton className="h-4 w-full" />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 ) : orders.length === 0 ? (
                     <div style={{ padding: '60px', textAlign: 'center' }}>
                         <p style={{ fontSize: '15px', fontWeight: 500, color: '#0f172a', margin: '0 0 6px' }}>
@@ -467,63 +474,67 @@ export default function OrdersPage() {
                     </div>
                 ) : (
                     <>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                    {['Nº', 'Título', 'Cliente', 'Técnico', 'Prioridade', 'Status', 'Data'].map((h) => (
-                                        <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                            {h}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {orders.map((order: ServiceOrder, i: number) => (
-                                    <tr
-                                        key={order.id}
-                                        onClick={() => navigate(`/orders/${order.id}`)}
-                                        style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
-                                        onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#f8fafc' }}
-                                        onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
-                                    >
-                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                            {formatOrderNumber(order.order_number)}
-                                        </td>
-                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {order.title}
-                                        </td>
-                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {order.customer_name ?? '—'}
-                                        </td>
-                                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {order.technician_name ?? '—'}
-                                        </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: PRIORITY_COLOR[order.priority] ?? '#64748b', fontWeight: 500 }}>
-                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLOR[order.priority] ?? '#64748b', flexShrink: 0 }} />
-                                                {PRIORITY_LABEL[order.priority] ?? order.priority}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <span style={{
-                                                display: 'inline-block', padding: '3px 8px', borderRadius: '6px',
-                                                fontSize: '12px', fontWeight: 500,
-                                                background: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).bg,
-                                                color: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).text,
-                                            }}>
-                                                {STATUS_LABEL[order.status] ?? order.status}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '12px 16px', fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                            {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                                        </td>
+                        {/* Scroll horizontal contido — a tabela rola dentro do card,
+                            nunca empurra a largura da página inteira. */}
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                        {['Nº', 'Título', 'Cliente', 'Técnico', 'Prioridade', 'Status', 'Data'].map((h) => (
+                                            <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                                {h}
+                                            </th>
+                                        ))}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {orders.map((order: ServiceOrder, i: number) => (
+                                        <tr
+                                            key={order.id}
+                                            onClick={() => navigate(`/orders/${order.id}`)}
+                                            style={{ borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
+                                            onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = '#f8fafc' }}
+                                            onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
+                                        >
+                                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                                {formatOrderNumber(order.order_number)}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {order.title}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {order.customer_name ?? '—'}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {order.technician_name ?? '—'}
+                                            </td>
+                                            <td style={{ padding: '12px 16px' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: PRIORITY_COLOR[order.priority] ?? '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: PRIORITY_COLOR[order.priority] ?? '#64748b', flexShrink: 0 }} />
+                                                    {PRIORITY_LABEL[order.priority] ?? order.priority}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '12px 16px' }}>
+                                                <span style={{
+                                                    display: 'inline-block', padding: '3px 8px', borderRadius: '6px',
+                                                    fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap',
+                                                    background: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).bg,
+                                                    color: (STATUS_COLOR[order.status] ?? STATUS_COLOR['draft']).text,
+                                                }}>
+                                                    {STATUS_LABEL[order.status] ?? order.status}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                                {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
 
                         {totalPages > 1 && (
-                            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                                 <span style={{ fontSize: '13px', color: '#94a3b8' }}>
                                     Página {page} de {totalPages}
                                 </span>

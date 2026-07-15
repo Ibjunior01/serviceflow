@@ -38,12 +38,11 @@ export default function LoginPage() {
 
     return (
         <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: '#f8fafc' }}>
-            {/* Painel esquerdo */}
-            <div style={{
-                flex: '0 0 420px', background: '#0f172a',
-                display: 'flex', flexDirection: 'column',
-                justifyContent: 'space-between', padding: '48px',
-            }}>
+            {/* Painel esquerdo — escondido em mobile (abaixo de 768px), visível a partir de md */}
+            <div
+                className="hidden md:flex md:flex-none md:w-[420px] flex-col justify-between p-12"
+                style={{ background: '#0f172a' }}
+            >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -80,8 +79,11 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            {/* Painel direito */}
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+            {/* Painel direito — padding reduzido em mobile via className, mantém 48px em desktop */}
+            <div
+                className="px-4 py-8 md:px-12 md:py-12"
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
                 <div style={{ width: '100%', maxWidth: '380px' }}>
                     <h2 style={{ color: '#0f172a', fontSize: '22px', fontWeight: 600, letterSpacing: '-0.025em', margin: '0 0 6px' }}>
                         Entrar na conta
