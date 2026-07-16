@@ -7,7 +7,6 @@ import type { ServiceOrder } from '@/api/orders'
 const STATUS_LABEL: Record<string, string> = {
     draft: 'Rascunho',
     scheduled: 'Agendada',
-    assigned: 'Atribuída',
     in_progress: 'Em andamento',
     completed: 'Concluída',
     invoiced: 'Faturada',
@@ -17,7 +16,6 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
     draft: { bg: '#f1f5f9', text: '#475569' },
     scheduled: { bg: '#f0f9ff', text: '#0369a1' },
-    assigned: { bg: '#eff6ff', text: '#1d4ed8' },
     in_progress: { bg: '#fff7ed', text: '#c2410c' },
     completed: { bg: '#f0fdf4', text: '#15803d' },
     invoiced: { bg: '#faf5ff', text: '#7e22ce' },
@@ -39,7 +37,6 @@ const PRIORITY_LABEL: Record<ServiceOrder['priority'], string> = {
 }
 
 const STAT_STATUSES: Array<{ key: ServiceOrder['status']; label: string; icon: string }> = [
-    { key: 'assigned', label: 'Atribuídas', icon: '📋' },
     { key: 'in_progress', label: 'Em andamento', icon: '🔧' },
     { key: 'completed', label: 'Concluídas', icon: '✅' },
     { key: 'invoiced', label: 'Faturadas', icon: '💰' },

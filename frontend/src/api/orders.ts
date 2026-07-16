@@ -4,7 +4,7 @@ export interface ServiceOrder {
     id: string
     order_number: number
     title: string
-    status: 'draft' | 'scheduled' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
+    status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
     priority: 'low' | 'normal' | 'high' | 'urgent'
     customer_name?: string
     technician_name?: string
@@ -17,7 +17,7 @@ export interface ServiceOrderDetail {
     order_number: number
     title: string
     description?: string
-    status: 'draft' | 'scheduled' | 'assigned' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
+    status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
     priority: 'low' | 'normal' | 'high' | 'urgent'
     customer_id?: string
     customer_name?: string
@@ -86,6 +86,14 @@ export const ordersApi = {
 
     getItems: (id: string) =>
         api.get<OrderItem[]>(`/orders/${id}/items`),
+    addItem: (orderId: string, data: {
+        item_type: 'labor' | 'part' | 'travel' | 'other'
+        description: string
+        quantity: number
+        unit_price: number
+        notes?: string
+    }) =>
+        api.post(`/orders/${orderId}/items`, data),
 
     delete: (id: string) =>
         api.delete(`/orders/${id}`),

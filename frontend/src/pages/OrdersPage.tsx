@@ -25,7 +25,7 @@ type CreateOrderForm = z.infer<typeof createOrderSchema>
 
 // ─── Constantes de UI ─────────────────────────────────────────────────────────
 const STATUS_LABEL: Record<string, string> = {
-    draft: 'Rascunho', scheduled: 'Agendada', assigned: 'Atribuída',
+    draft: 'Rascunho', scheduled: 'Agendada',
     in_progress: 'Em andamento', completed: 'Concluída',
     invoiced: 'Faturada', cancelled: 'Cancelada',
 }
@@ -33,7 +33,6 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
     draft: { bg: '#f1f5f9', text: '#475569' },
     scheduled: { bg: '#f0f9ff', text: '#0369a1' },
-    assigned: { bg: '#eff6ff', text: '#1d4ed8' },
     in_progress: { bg: '#fff7ed', text: '#c2410c' },
     completed: { bg: '#f0fdf4', text: '#15803d' },
     invoiced: { bg: '#faf5ff', text: '#7e22ce' },
@@ -52,7 +51,6 @@ const STATUS_FILTERS = [
     { value: '', label: 'Todas' },
     { value: 'draft', label: 'Rascunho' },
     { value: 'scheduled', label: 'Agendada' },
-    { value: 'assigned', label: 'Atribuída' },
     { value: 'in_progress', label: 'Em andamento' },
     { value: 'completed', label: 'Concluída' },
     { value: 'invoiced', label: 'Faturada' },
