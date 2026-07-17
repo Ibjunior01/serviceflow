@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { ordersApi } from '@/api/orders'
 import type { ServiceOrder } from '@/api/orders'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const STATUS_LABEL: Record<string, string> = {
     draft: 'Rascunho',
@@ -37,6 +38,7 @@ const PRIORITY_LABEL: Record<ServiceOrder['priority'], string> = {
 }
 
 const STAT_STATUSES: Array<{ key: ServiceOrder['status']; label: string; icon: string }> = [
+    { key: 'scheduled', label: 'Agendadas', icon: '📅' },
     { key: 'in_progress', label: 'Em andamento', icon: '🔧' },
     { key: 'completed', label: 'Concluídas', icon: '✅' },
     { key: 'invoiced', label: 'Faturadas', icon: '💰' },
@@ -57,6 +59,28 @@ export default function DashboardPage() {
         orders.filter((o) => o.status === status).length
 
     const recent = orders.slice(0, 8)
+
+    //função do gráfico
+    const monthlyData = (() => {
+        const now = new Date()
+        const months: { key: string; label: string; count: number }[] = []
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            months.push({
+                key: `${d.getFullYear()}-${d.getMonth()}`,
+                label: d.toLocaleDateString('pt-BR', { month: 'short' }),
+                count: 0,
+            })
+        }
+        orders.forEach((o) => {
+            if (!o.created_at) return
+            const d = new Date(o.created_at)
+            const key = `${d.getFullYear()}-${d.getMonth()}`
+            const bucket = months.find((m) => m.key === key)
+            if (bucket) bucket.count += 1
+        })
+        return months
+    })()
 
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
@@ -103,6 +127,30 @@ export default function DashboardPage() {
                     </div>
                 ))}
             </div>
+
+            {/* Gráfico mensal */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a', margin: '0 0 16px' }}>
+                    Ordens de serviço por mês
+                </h2>
+                <div style={{ width: '100%', height: '240px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip
+                                cursor={{ fill: '#f8fafc' }}
+                                contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                                labelFormatter={(label) => `${label}`}
+                                formatter={(value) => [`${value} OS`, '']}
+                            />
+                            <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
 
             {/* Recent orders */}
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
