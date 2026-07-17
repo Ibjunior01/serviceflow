@@ -1,14 +1,16 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { authApi } from '@/api/auth'
-import { useNavigate, Link } from 'react-router-dom'
 
-export default function LoginPage() {
+export default function RegisterPage() {
     const navigate = useNavigate()
     const { setTokens, setUser } = useAuthStore()
 
-    const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
+    const [companyName, setCompanyName] = useState('')
+    const [ownerName, setOwnerName] = useState('')
+    const [ownerEmail, setOwnerEmail] = useState('')
+    const [ownerPassword, setOwnerPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
@@ -19,26 +21,35 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
-            const { data: auth } = await authApi.login({ email, password })
+            const { data: auth } = await authApi.register({
+                name: companyName,
+                owner_name: ownerName,
+                owner_email: ownerEmail,
+                owner_password: ownerPassword,
+            })
             setTokens(auth.access_token, auth.refresh_token)
             const { data: me } = await authApi.me()
             setUser(me)
             navigate('/')
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { status?: number } }
-            if (axiosErr?.response?.status === 401) {
-                setError('E-mail ou senha incorretos.')
+            const axiosErr = err as { response?: { status?: number; data?: { detail?: string } } }
+            if (axiosErr?.response?.status === 422) {
+                setError('Verifique os dados informados.')
+            } else if (axiosErr?.response?.status === 409) {
+                setError('Este e-mail já está cadastrado.')
             } else {
-                setError('Não foi possível conectar ao servidor. Tente novamente.')
+                setError(axiosErr?.response?.data?.detail ?? 'Não foi possível criar a conta. Tente novamente.')
             }
         } finally {
             setLoading(false)
         }
     }
 
+    const canSubmit = companyName && ownerName && ownerEmail && ownerPassword.length >= 8
+
     return (
         <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: '#f8fafc' }}>
-            {/* Painel esquerdo — escondido em mobile (abaixo de 768px), visível a partir de md */}
+            {/* Painel esquerdo — mesmo estilo da LoginPage */}
             <div
                 className="hidden md:flex md:flex-none md:w-[420px] flex-col justify-between p-12"
                 style={{ background: '#0f172a' }}
@@ -79,26 +90,52 @@ export default function LoginPage() {
                 </div>
             </div>
 
-            {/* Painel direito — padding reduzido em mobile via className, mantém 48px em desktop */}
+            {/* Painel direito */}
             <div
                 className="px-4 py-8 md:px-12 md:py-12"
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}
             >
                 <div style={{ width: '100%', maxWidth: '380px' }}>
                     <h2 style={{ color: '#0f172a', fontSize: '22px', fontWeight: 600, letterSpacing: '-0.025em', margin: '0 0 6px' }}>
-                        Entrar na conta
+                        Criar conta
                     </h2>
                     <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 32px' }}>
-                        Use suas credenciais de acesso para continuar.
+                        Comece agora — 14 dias grátis, sem cartão.
                     </p>
 
                     <form onSubmit={handleSubmit} noValidate>
                         <div style={{ marginBottom: '16px' }}>
                             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0f172a', marginBottom: '6px' }}>
+                                Nome da empresa
+                            </label>
+                            <input
+                                type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                                placeholder="Refrigeração Silva" required
+                                style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#3b82f6' }}
+                                onBlur={(e) => { e.target.style.borderColor = '#e2e8f0' }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0f172a', marginBottom: '6px' }}>
+                                Seu nome
+                            </label>
+                            <input
+                                type="text" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                                placeholder="Seu nome completo" required
+                                style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#3b82f6' }}
+                                onBlur={(e) => { e.target.style.borderColor = '#e2e8f0' }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0f172a', marginBottom: '6px' }}>
                                 E-mail
                             </label>
                             <input
-                                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                                type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
                                 placeholder="nome@empresa.com" required autoComplete="email"
                                 style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
                                 onFocus={(e) => { e.target.style.borderColor = '#3b82f6' }}
@@ -106,15 +143,15 @@ export default function LoginPage() {
                             />
                         </div>
 
-                        <div style={{ marginBottom: '24px' }}>
+                        <div style={{ marginBottom: '8px' }}>
                             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0f172a', marginBottom: '6px' }}>
                                 Senha
                             </label>
                             <div style={{ position: 'relative' }}>
                                 <input
-                                    type={showPassword ? 'text' : 'password'} value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="••••••••" required autoComplete="current-password"
+                                    type={showPassword ? 'text' : 'password'} value={ownerPassword}
+                                    onChange={(e) => setOwnerPassword(e.target.value)}
+                                    placeholder="Mínimo 8 caracteres" required autoComplete="new-password"
                                     style={{ width: '100%', height: '40px', padding: '0 40px 0 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
                                     onFocus={(e) => { e.target.style.borderColor = '#3b82f6' }}
                                     onBlur={(e) => { e.target.style.borderColor = '#e2e8f0' }}
@@ -136,6 +173,9 @@ export default function LoginPage() {
                                 </button>
                             </div>
                         </div>
+                        <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 24px' }}>
+                            Mínimo de 8 caracteres.
+                        </p>
 
                         {error && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', marginBottom: '16px' }}>
@@ -146,21 +186,17 @@ export default function LoginPage() {
                             </div>
                         )}
 
-                        <button type="submit" disabled={loading || !email || !password}
-                            style={{ width: '100%', height: '40px', borderRadius: '8px', background: loading || !email || !password ? '#e2e8f0' : '#3b82f6', color: loading || !email || !password ? '#94a3b8' : '#fff', border: 'none', fontSize: '14px', fontWeight: 500, cursor: loading || !email || !password ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                            {loading ? 'Entrando…' : 'Entrar'}
+                        <button type="submit" disabled={loading || !canSubmit}
+                            style={{ width: '100%', height: '40px', borderRadius: '8px', background: loading || !canSubmit ? '#e2e8f0' : '#3b82f6', color: loading || !canSubmit ? '#94a3b8' : '#fff', border: 'none', fontSize: '14px', fontWeight: 500, cursor: loading || !canSubmit ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            {loading ? 'Criando conta…' : 'Criar conta'}
                         </button>
                     </form>
 
                     <p style={{ marginTop: '24px', fontSize: '13px', color: '#64748b', textAlign: 'center' }}>
-                        Não tem conta?{' '}
-                        <Link to="/register" style={{ color: '#3b82f6', fontWeight: 500, textDecoration: 'none' }}>
-                            Criar conta
+                        Já tem conta?{' '}
+                        <Link to="/login" style={{ color: '#3b82f6', fontWeight: 500, textDecoration: 'none' }}>
+                            Entrar
                         </Link>
-                    </p>
-
-                    <p style={{ marginTop: '32px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
-                        ServiceFlow © {new Date().getFullYear()} — Gestão de campo para refrigeração e ar-condicionado
                     </p>
                 </div>
             </div>

@@ -1,8 +1,16 @@
 # ServiceFlow — Project Continuity Document
 
 ## Sessão Atual
-**Fase:** 3 — Preparação para Deploy (Backend + Frontend)
-**Status:** Ambiente de produção simulado localmente (Docker Compose + Caddy + Cloudflare Tunnel) **validado de ponta a ponta**, incluindo teste funcional completo em celular real (login, criar cliente, criar OS). **Responsividade mobile corrigida e validada** em todas as telas principais. Falta apenas: configurar variáveis de ambiente reais do Hetzner/Vercel e rodar o checkpoint final de pytest antes do primeiro deploy pago.
+**Fase:** 3 — Deploy em Produção **CONCLUÍDO**
+**Status:** ServiceFlow está no ar, publicamente acessível, com banco de dados real, backend e frontend em produção. Fluxo completo validado em produção: login, criar cliente, criar OS, adicionar itens (peças/serviços), alterar status via FSM, dashboard com métricas e gráfico mensal. Suíte pytest (68/68) validada localmente como checkpoint final.
+
+**Mudança de infraestrutura em relação ao plano original:** o deploy não foi feito no Hetzner (VPS pago) como planejado inicialmente — por decisão de custo, optou-se por hospedagem gratuita: **Render** (backend + PostgreSQL) e **Vercel** (frontend), ambos no free tier. Documentado abaixo com as limitações conhecidas dessa escolha.
+
+## URLs de Produção
+- **Frontend:** https://serviceflow-liard.vercel.app
+- **Backend:** https://serviceflow-backend-5ljk.onrender.com
+- **Docs/Swagger:** https://serviceflow-backend-5ljk.onrender.com/docs
+- **Banco de dados:** PostgreSQL gerenciado pelo Render (`serviceflow-db`, região Oregon)
 
 ## Progresso das Fases
 
@@ -11,7 +19,7 @@
 | 1A–1G | Backend completo (estrutura, models, schemas, auth, CRUD, endpoints, testes) | ✅ Concluída |
 | 2A | Frontend React + Vite + Tailwind — todas as telas | ✅ Concluída |
 | 2B | Polimento de UX + Preparação para Deploy | ✅ Concluída |
-| 3 | Deploy — Backend (Hetzner) + Frontend (Vercel) | ⏳ Em andamento — infraestrutura local e responsividade 100% validadas |
+| 3 | Deploy — Backend (Render) + Frontend (Vercel) | ✅ **Concluída — sistema em produção e funcional** |
 
 ## Decisões de Arquitetura (backend) — inalteradas desde sessões anteriores
 - Async engine (asyncpg), API versionada em `/api/v1`, Settings via pydantic-settings com validação no boot
@@ -19,83 +27,158 @@
 - Repository Pattern (`CRUDBase` genérico) + Service Layer, singletons de módulo
 - `technician_id` (não `assigned_to`) em todas as camadas; `order_number` é `INTEGER` puro no banco, formatação `OS-0001` só no frontend
 - Login via JSON `{"email", "password"}`; refresh sem blacklist no MVP
-- Ver sessões anteriores para o histórico completo de bugs de nomenclatura (`assigned_to`→`technician_id`, `name`→`full_name`, `order_number` VARCHAR→INTEGER) — todos corrigidos e validados com 68/68 testes passando.
+- **Enum `OrderStatus` (fonte da verdade, backend):** `draft`, `scheduled`, `in_progress`, `completed`, `invoiced`, `cancelled` — **não existe** (e nunca deveria ter existido no frontend) o status `assigned`, que foi removido nesta sessão (ver abaixo).
 
 ---
 
-## Sessão Fase 3.6 — Correção de responsividade mobile (12–14/07/2026)
+## Sessão Fase 3.7 — Deploy real em produção (16/07/2026)
 
-Pendência aberta na sessão anterior (3.5), agora fechada. Padrão raiz identificado no início: o frontend usa `style={{}}` inline em quase todo componente, e inline style sempre vence classe CSS — então qualquer largura/grid fixo em `style` nunca respondia a media query nenhuma, mesmo quando o Tailwind estava configurado corretamente.
+Sessão que levou o ServiceFlow do ambiente local/simulado para produção pública de verdade, com múltiplos bugs de infraestrutura e um bug funcional relevante corrigidos ao longo do caminho.
 
-### 1. Diagnóstico inicial — viewport e Tailwind descartados como causa
+### 1. Decisão de infraestrutura: Render + Vercel (grátis) em vez de Hetzner (pago)
 
-- `index.html` já tinha `<meta name="viewport" content="width=device-width, initial-scale=1.0">` correto desde o início.
-- Tailwind v4 confirmado configurado corretamente: plugin `@tailwindcss/vite` no `vite.config.ts`, `@import "tailwindcss"` no `src/index.css`. Não havia (nem precisa haver, no v4) `tailwind.config.js`.
-- **Armadilha encontrada:** um Service Worker fantasma ficou registrado em `localhost:5173` (origem não identificada com certeza — possivelmente sobra de outro projeto Vite testado na mesma porta) servindo uma versão em cache do app. Isso mascarou todas as correções de CSS por várias rodadas de teste — mudanças no código não apareciam na aba normal do Chrome, só em aba anônima. **Sintoma característico:** funciona em aba anônima, não funciona em aba normal, mesmo com "Disable cache" do DevTools marcado (esse não desliga Service Worker). **Correção pendente, não crítica:** `DevTools → Application → Service Workers → Unregister` + `Clear site data`. Enquanto não resolvido, **sempre validar mudanças de CSS/layout em aba anônima**.
+Motivo: validar o deploy real antes de comprometer orçamento. Render oferece PostgreSQL e Web Service (Docker) gratuitos; Vercel já era gratuito para o frontend desde o início do planejamento.
 
-### 2. `LoginPage.tsx` — painel de branding fixo em 420px
+**Limitações conhecidas do free tier, documentadas para decisão futura:**
+- Web Service do Render **hiberna após inatividade** — primeira requisição após período ocioso tem latência maior (cold start) enquanto o container reinicia.
+- PostgreSQL gratuito do Render **expira em 90 dias** salvo upgrade — ação necessária antes desse prazo se o projeto continuar nesse tier.
+- Shell interativo do Render (útil para debug/comandos manuais) é recurso pago — indisponível no free tier.
 
-Painel esquerdo (dark, marketing) usava `flex: '0 0 420px'` inline sem media query — sozinho já estourava a largura de qualquer celular. **Correção:** painel movido para `className="hidden md:flex md:flex-none md:w-[420px] ..."` (Tailwind), escondendo completamente abaixo de 768px — padrão comum em SaaS mobile (Linear, Stripe, etc.), foco total no formulário em telas pequenas. Padding do painel direito também migrado de `style` fixo para `className="px-4 py-8 md:px-12 md:py-12"`.
+### 2. Criação da infraestrutura Render
 
-### 3. `Sidebar.tsx` + `AppLayout.tsx` — menu lateral fixo, sem navegação mobile
+- **PostgreSQL** (`serviceflow-db`, Oregon) criado primeiro.
+- **Web Service** (`serviceflow-backend`) criado apontando para `backend/Dockerfile.prod`:
+  - Root Directory: `backend`
+  - Docker Build Context: `backend`
+  - Dockerfile Path: `backend/Dockerfile.prod`
+  - Health Check Path: `/health` (endpoint já existente no `main.py`)
+  - Pre-Deploy Command: `alembic upgrade head`
+  - Instance Type: Free
+- **Caddy não é necessário no Render** — a plataforma já provê HTTPS/proxy reverso automaticamente; o serviço `caddy` do `docker-compose.prod.yml` (pensado para Hetzner) não se aplica aqui.
 
-Sidebar era `width: '220px'` fixo, sempre visível, sem nenhum jeito de esconder/mostrar. **Correção:** convertida para drawer deslizante — escondida por padrão em mobile (`-translate-x-full`), abre com overlay via `AppLayout` (novo estado `sidebarOpen` + botão hambúrguer numa barra superior nova, só visível em mobile). Fecha automaticamente ao clicar num link ou no overlay. Em desktop (`md:` +) permanece fixa, comportamento idêntico ao original.
+### 3. Bug: frontend não sabia a URL da API em produção
 
-**Bug secundário encontrado neste componente:** `h-screen` (`100vh`) cortava o rodapé do menu (botão de logout) no Safari iOS quando a barra de endereço está visível, porque `100vh` no Safari mobile é calculado com a barra retraída. **Corrigido** trocando para `h-dvh` (dynamic viewport height, suportado nativamente pelo Tailwind v4), que se ajusta automaticamente à barra do navegador aparecendo/sumindo.
+`src/api/client.ts` tinha `baseURL: '/api/v1'` hardcoded, dependente do proxy do Vite (que só existe em `npm run dev`). Em produção (build estático servido pela Vercel), isso resultava em chamadas para o próprio domínio da Vercel, sem backend nenhum ali.
 
-### 4. Padrão recorrente encontrado e corrigido em 4 páginas: grids fixos de 2/4 colunas + tabelas sem scroll contido
+**Correção:** introduzida variável de ambiente `VITE_API_URL`, com fallback para o proxy em dev:
+```typescript
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/v1`
+  : '/api/v1'
+```
+Aplicado tanto na criação da instância `axios` quanto na chamada de refresh token (que usava `axios.post` direto com caminho relativo — bug irmão do mesmo problema, também corrigido).
 
-Auditoria sistemática via `Select-String "gridTemplateColumns|width: '\d|flex: '0"` em todo `src/` encontrou o mesmo padrão repetido:
+### 4. Bug: `alembic upgrade head` (Pre-Deploy Command) falhou silenciosamente no primeiro deploy
 
-- **`DashboardPage.tsx`**: grid de stat cards `repeat(4, 1fr)` fixo → `className="grid grid-cols-2 sm:grid-cols-4 gap-4"`. Tabela "Ordens recentes" sem wrapper de scroll → envolvida em `<div style={{ overflowX: 'auto' }}>`.
-- **`OrderDetailPage.tsx`**: grid de cards (Cliente/Técnico/Datas/Total) `1fr 1fr` fixo → `grid-cols-1 sm:grid-cols-2`. Tabela de itens da ordem → mesmo tratamento de `overflowX: auto`. Header (título + botão "Alterar status") ganhou `flexWrap: 'wrap'` para não espremer em telas estreitas.
-- **`OrdersPage.tsx`**: grid do modal de criação (Prioridade + Agendamento) `1fr 1fr` fixo → `grid-cols-1 sm:grid-cols-2`. As duas tabelas (skeleton de loading e dados reais) → `overflowX: auto`. Modal ganhou `maxHeight: calc(100vh - 32px)` + `overflowY: auto` (evita corte em celulares pequenos com muitos campos). Header da página e paginação ganharam `flexWrap: 'wrap'`.
+Resultado: banco do Render ficou **sem nenhuma tabela**, causando `500 Internal Server Error` (`UndefinedTableError: relation "users" does not exist`) em qualquer tentativa de login.
 
-**Padrão de correção consistente em todos os casos:** grids de N colunas fixas viram Tailwind responsivo (`grid-cols-1 sm:grid-cols-2` ou `grid-cols-2 sm:grid-cols-4`, conforme o caso); tabelas ganham wrapper `overflow-x-auto` — deixando a tabela rolar **dentro** do próprio card, sem nunca empurrar a largura da página inteira (era a causa do "preciso passar a tela pra ver o último indicador" relatado no teste mobile).
+**Correção manual (contorno imediato):** migrations rodadas do computador local, apontando para a **External Database URL** do Render:
+```bash
+$env:DATABASE_URL="postgresql+asyncpg://usuario:senha@host.oregon-postgres.render.com/db?ssl=require"
+alembic upgrade head
+```
+Duas descobertas no caminho:
+- **`?ssl=require` é obrigatório** na URL para `asyncpg` ao conectar externamente no Postgres do Render (sem isso: `InvalidAuthorizationSpecificationError: SSL/TLS required`).
+- Usar a **External** URL (com domínio completo `.oregon-postgres.render.com`) é necessário para conexões de fora da rede do Render; a **Internal** URL (usada pelo próprio Web Service em produção) não é alcançável do computador local.
 
-### 5. Validação final
+**Causa raiz do Pre-Deploy Command não pendente de investigação mais profunda** — ficou resolvido operacionalmente rodando a migration manualmente uma vez; deploys futuros devem ser monitorados para confirmar se o Pre-Deploy Command passa a funcionar corretamente.
 
-Testado em celular real (Safari, via túnel do frontend) e em DevTools (aba anônima): Dashboard, Ordens de Serviço (lista + modal + detalhe), Configurações, menu lateral — todos renderizando em coluna única, sem corte nem scroll horizontal indesejado, botão de logout visível, hambúrguer funcional. **Responsividade mobile considerada fechada.**
+### 5. Bug funcional: status `assigned` obsoleto no frontend causando erro 422 em produção
+
+Ao tentar mudar o status de uma OS para "Atribuída" em produção, a API retornava `422` com `type: "enum"` — o backend só aceita `draft`, `scheduled`, `in_progress`, `completed`, `invoiced`, `cancelled`. O valor `assigned` era resquício de uma versão anterior do modelo de dados (provavelmente da época da renomeação `assigned_to` → `technician_id`, Fase 2B) e ficou esquecido em **4 arquivos do frontend**: `api/orders.ts` (union type), `DashboardPage.tsx`, `OrderDetailPage.tsx` (incluindo a tabela `VALID_TRANSITIONS` da FSM local, que replicava incorretamente a FSM do backend) e `OrdersPage.tsx`.
+
+**Correção:** removidas todas as ocorrências de `assigned` como status; `VALID_TRANSITIONS` do frontend corrigida para bater com o enum real do backend:
+```typescript
+const VALID_TRANSITIONS: Record<string, ServiceOrderDetail['status'][]> = {
+    draft: ['scheduled', 'cancelled'],
+    scheduled: ['in_progress', 'cancelled'],
+    in_progress: ['completed', 'cancelled'],
+    completed: ['invoiced'],
+    invoiced: [],
+    cancelled: [],
+}
+```
+
+### 6. Feature nova: adicionar itens (peças/serviços) à Ordem de Serviço
+
+Endpoint `POST /api/v1/orders/{order_id}/items` já existia no backend desde fases anteriores, mas **nunca tinha sido implementado no frontend** — só existia leitura (`getItems`), não criação. Implementado nesta sessão:
+- `addItem` adicionado em `src/api/orders.ts`.
+- Modal de criação de item em `OrderDetailPage.tsx`, com `react-hook-form` + Zod, campos `item_type` (`labor`/`part`/`travel`/`other`), `description`, `quantity`, `unit_price`.
+- **Bug de tipagem TypeScript encontrado e corrigido:** `z.coerce.number()` no schema Zod gera uma diferença entre o tipo de entrada do formulário (`string | number`, o que o `<input>` realmente entrega) e o tipo de saída (`number`, após coerção). `useForm<ItemFormData>` usando só um genérico causava erro `Type 'unknown' is not assignable to type 'number'`. **Correção:** uso dos três genéricos do `useForm` (`TFieldValues`, `TContext`, `TTransformedValues`), com `z.input<>` para entrada e `z.output<>` para saída:
+```typescript
+type ItemFormInput = z.input<typeof itemSchema>
+type ItemFormData = z.output<typeof itemSchema>
+
+useForm<ItemFormInput, unknown, ItemFormData>({ resolver: zodResolver(itemSchema), ... })
+```
+
+### 7. Dashboard: novo card "Agendadas" + gráfico mensal de OS
+
+- Card `scheduled` (📅 "Agendadas") adicionado a `STAT_STATUSES` em `DashboardPage.tsx`, ocupando o espaço que antes seria do `assigned` removido — grid responsivo já dinâmico, sem necessidade de ajuste de layout.
+- Gráfico de barras "Ordens de serviço por mês" (últimos 6 meses) adicionado com **`recharts`** (nova dependência).
+  - **Bug de instalação:** `npm install recharts` não trouxe `react-is` (peer dependency) corretamente — possivelmente relacionado ao `.npmrc` com `legacy-peer-deps=true` já existente no projeto (criado originalmente por causa do `openapi-typescript`). Erro em runtime: `Failed to resolve import "react-is" from recharts.js`. **Corrigido** com `npm install react-is` explícito + limpeza do cache do Vite (`node_modules/.vite`).
+  - **Bug de tipagem no `Tooltip formatter`:** anotação explícita `(value: number) =>` conflitava com o tipo genérico `ValueType | undefined` esperado pelo `recharts`. **Corrigido** removendo a anotação de tipo explícita, deixando o TypeScript inferir do contexto JSX.
+  - Agregação mensal feita client-side a partir dos dados já carregados pela query existente (`page_size: 50`) — sem necessidade de endpoint novo no backend nesta fase. **Nota para o futuro:** se o volume de OS crescer significativamente, considerar endpoint de agregação dedicado no backend em vez de agregação no frontend.
+
+### 8. Bug operacional: webhook GitHub → Vercel atrasado
+
+Dois commits consecutivos (`76b116d`, `bcb5135`) não dispararam deploy automático imediato na Vercel — o painel de Deployments não os listava por alguns minutos, mesmo com o push confirmado no GitHub. **Resolvido sozinho** após aguardar / forçar um commit vazio adicional; ambos os deployments pendentes apareceram e processaram em sequência logo em seguida. **Não foi identificada causa definitiva** — pode ter sido apenas atraso momentâneo do webhook, não uma falha de configuração. Vale observar se o padrão se repete em deploys futuros.
+
+### 9. Ambientes local vs. produção — bancos de dados independentes (não é bug)
+
+Registrado para evitar confusão futura: dados criados testando em `localhost` (banco Postgres local via Docker) **não aparecem** em produção (banco do Render), e vice-versa — são bancos de dados completamente separados. Isso é o comportamento correto e esperado da separação dev/produção.
+
+### 10. Checkpoint final — suíte pytest local
+
+Rodada após correção de uma pista falsa: a primeira tentativa retornou **68 erros** (igual ao número total de testes), sintoma de problema de configuração/ambiente único afetando todos os testes igualmente — não 68 bugs distintos. Causa: `backend/.env` local provavelmente ainda apontando para o banco do **Render** (de quando a migration manual foi rodada apontando para lá), em vez do Postgres **local**. Após confirmar `DATABASE_URL`/`POSTGRES_HOST=localhost` no `.env` e subir o Postgres local via Docker:
+```
+68 passed, 3869 warnings in 72.47s
+```
+**Checkpoint final da Fase 3 fechado com sucesso.**
 
 ---
 
-## Fase 3 — Checklist atualizado
+## Fase 3 — Checklist final
 
 - [x] Gerar `types/api.ts` via `openapi-typescript`
 - [x] `assigned_to` → `technician_id` em todas as camadas
 - [x] Build de produção do frontend validado
-- [x] Suíte pytest (68/68) validada
+- [x] Suíte pytest (68/68) validada — **local, checkpoint final pós-deploy**
 - [x] `hooks/useAuth.ts` vazio removido
 - [x] `order_number` como `INTEGER` — migration concluída
 - [x] Bug do shadcn CLI corrigido
 - [x] `.npmrc` com `legacy-peer-deps=true`
-- [x] **CORS de produção configurado e validado** (bug `NoDecode` resolvido)
-- [x] **Dockerfile de produção** — multi-stage, non-root, validado (bug `email-validator` no lock resolvido)
-- [x] **`docker-compose.prod.yml` + Caddyfile** — validado (múltiplos bugs de TLS/`auto_https` resolvidos)
-- [x] **Migrations rodando em produção** — validadas do zero (banco vazio → schema completo)
-- [x] **Teste mobile via Cloudflare Tunnel** — validado, incluindo fluxo funcional completo (login, criar cliente, criar OS)
-- [x] **Responsividade mobile** — corrigida e validada em LoginPage, Sidebar/AppLayout, DashboardPage, OrderDetailPage, OrdersPage
-- [ ] Variáveis de ambiente de produção reais — Hetzner (`DATABASE_URL`, `SECRET_KEY` forte gerado via `openssl rand -hex 32` — o atual no `.env` é um placeholder curto, **não pode ir para produção**) e Vercel (URL pública da API)
-- [ ] Rodar pytest uma última vez como checkpoint final antes do primeiro deploy pago no Hetzner
+- [x] CORS de produção configurado e validado
+- [x] Dockerfile de produção — multi-stage, non-root, validado
+- [x] Migrations rodando em produção (aplicadas manualmente; Pre-Deploy Command a monitorar)
+- [x] Responsividade mobile — corrigida e validada
+- [x] **Backend em produção (Render)** — `serviceflow-backend-5ljk.onrender.com`, health check e Swagger validados
+- [x] **PostgreSQL em produção (Render)** — schema migrado, `?ssl=require` documentado para acesso externo
+- [x] **Frontend em produção (Vercel)** — `serviceflow-liard.vercel.app`, `VITE_API_URL` configurada
+- [x] **CORS_ORIGINS de produção** — atualizado com domínio real da Vercel
+- [x] **Fluxo completo validado em produção** — login, criar cliente, criar OS, adicionar itens, transições de status, dashboard
+- [x] **Bug de status `assigned` obsoleto** — removido do frontend em 4 arquivos
+- [x] **Feature de adicionar itens (peças/serviços) à OS** — implementada do zero no frontend
+- [x] **Dashboard: card "Agendadas" + gráfico mensal** — implementado com `recharts`
 
 ## Decisões Pendentes / A Revisar (baixa prioridade, pós-deploy)
-*(lista herdada de sessões anteriores + 1 item novo desta sessão)*
-- Soft delete vs `is_active`, RefreshToken blacklist, Checklist/ChecklistItem futuro, `computed_field` para `DATABASE_URL`, refatorar `OrdersPage.tsx` para shadcn `<Table>`, buscar `console.log` residuais, testar UsersPage com técnico logado, code-splitting por rota, simplificar login eliminando `/auth/me` extra, refatorar `get_order` manual, exibir `order_number` no header de `OrderDetailPage`, aliases de tipo em `src/api/orders.ts`.
-- **Novo:** investigar e remover o Service Worker fantasma registrado em `localhost:5173` (`Application → Service Workers → Unregister` + `Clear site data`) — não bloqueia nada, mas continua mascarando testes futuros de CSS/layout na aba normal do navegador até ser removido.
-- **Novo (opcional):** migrar `LoginPage.tsx`, `Sidebar.tsx` e `AppLayout.tsx` de `style={{}}` inline para Tailwind puro, por consistência com o resto do codebase (que já usa shadcn/Tailwind) — não é urgente, mas evita o mesmo tipo de bug de especificidade CSS reaparecer em telas futuras.
-- **Novo (opcional):** considerar esconder colunas menos críticas das tabelas (ex.: "Data") em mobile via `hidden sm:table-cell`, reduzindo a necessidade de scroll horizontal — decisão de produto, não implementado nesta sessão.
+*(lista herdada + itens novos desta sessão)*
+- Soft delete vs `is_active`, RefreshToken blacklist, Checklist/ChecklistItem futuro, `computed_field` para `DATABASE_URL`, refatorar `OrdersPage.tsx` para shadcn `<Table>`, buscar `console.log` residuais, testar UsersPage com técnico logado, simplificar login eliminando `/auth/me` extra, refatorar `get_order` manual, exibir `order_number` no header de `OrderDetailPage`, aliases de tipo em `src/api/orders.ts`.
+- Service Worker fantasma em `localhost:5173` — ainda não resolvido (`Application → Service Workers → Unregister` + `Clear site data`); segue mascarando testes de CSS na aba normal do navegador.
+- Migrar `LoginPage.tsx`, `Sidebar.tsx`, `AppLayout.tsx` de `style={{}}` inline para Tailwind puro.
+- Esconder colunas menos críticas das tabelas em mobile via `hidden sm:table-cell`.
+- **Novo:** code-splitting por rota — `npm run build` já emite aviso de chunk >500kB (bundle principal ~1MB/316kB gzip), agravado pela adição do `recharts`. Não bloqueia produção, mas vale revisitar se o app continuar crescendo.
+- **Novo:** investigar causa raiz do Pre-Deploy Command (`alembic upgrade head`) não ter rodado com sucesso no primeiro deploy do Render — monitorar próximos deploys para confirmar se o problema persiste.
+- **Novo:** monitorar prazo de 90 dias do PostgreSQL gratuito do Render — decidir upgrade ou migração antes do vencimento.
+- **Novo:** avaliar migração para Hetzner (infraestrutura paga, sem cold start/expiração) quando o projeto estiver pronto para uso comercial real com clientes pagantes.
+- **Novo (opcional):** agregação do gráfico mensal do Dashboard é feita client-side sobre até 50 ordens — endpoint de agregação dedicado no backend pode ser necessário se o volume de dados crescer.
 
 ---
 
 ## Próximo Passo Recomendado
 
-**Configurar variáveis de ambiente reais de produção (Hetzner + Vercel) e rodar o checkpoint final de pytest.**
+**A Fase 3 está concluída.** O ServiceFlow está em produção, publicamente acessível, com fluxo funcional completo validado (autenticação, clientes, ordens de serviço, itens, status, dashboard). Sugestões de próximos passos, em ordem de prioridade:
 
-Motivo: com a infraestrutura local (Docker, Caddy, túnel, banco, CORS) e a responsividade mobile agora comprovadamente sólidas, os únicos itens restantes antes do primeiro deploy pago são de configuração, não de código:
-
-1. Gerar `SECRET_KEY` forte: `openssl rand -hex 32` (o valor atual no `.env` é um placeholder curto e **não pode** ir para produção).
-2. Definir variáveis de ambiente reais no Hetzner: `DATABASE_URL` (apontando para o Postgres de produção), `SECRET_KEY` (gerada no passo 1), `CORS_ORIGINS` (domínio real do Vercel, não `localhost`).
-3. Definir variável de ambiente no Vercel: URL pública da API no Hetzner (substituindo o proxy local do Vite, que só existe em dev).
-4. Rodar a suíte pytest (68/68) uma última vez como checkpoint final, antes de comprometer a infraestrutura paga.
-
-Só depois desses 4 passos faz sentido seguir para o primeiro deploy real no Hetzner (backend) e Vercel (frontend).
+1. **Criar dados reais** (clientes e ordens de serviço de verdade, não mais testes) diretamente em produção, já que os testes ficaram no banco local.
+2. **Convite a um segundo usuário de teste** (ex.: técnico real de uma das oficinas parceiras) para validar a experiência fora do olhar do desenvolvedor.
+3. Revisar a lista de "Decisões Pendentes" acima e priorizar o que for relevante antes de abrir para clientes pagantes — com destaque para o prazo de expiração do banco gratuito do Render (90 dias) e a decisão de manter o free tier ou migrar para Hetzner.

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
+import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import OrdersPage from '@/pages/OrdersPage'
 import OrderDetailPage from '@/pages/OrderDetailPage'
@@ -16,6 +17,7 @@ function ProtectedRoute() {
 
 export const router = createBrowserRouter([
     { path: '/login', element: <LoginPage /> },
+    { path: '/register', element: <RegisterPage /> },
     {
         element: <ProtectedRoute />,
         children: [
