@@ -16,6 +16,7 @@ from app.schemas.service_order import (
     ServiceOrderUpdate,
 )
 from app.services.service_order_service import service_order_service
+from app.core.plan_limits import check_order_limit
 
 router = APIRouter(prefix="/orders", tags=["service-orders"])
 
@@ -47,6 +48,7 @@ async def create_order(
     current_user: AdminOnly,
     db: AsyncSession = Depends(get_db),
 ):
+    await check_order_limit(db, current_user.company)
     return await service_order_service.create(
         db, company_id=current_user.company_id, data=payload, created_by=current_user
     )

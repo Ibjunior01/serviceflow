@@ -14,6 +14,10 @@ from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User, UserRole
 
+from datetime import datetime, timezone
+from app.models.company import PlanTier
+from app.models.subscription import SubscriptionStatus
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -27,6 +31,19 @@ async def _get_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return credentials.credentials
+
+
+async def _apply_trial_expiration(user: User, session: AsyncSession) -> None:
+    subscription = user.company.subscription
+    if subscription is None or subscription.status != SubscriptionStatus.TRIALING:
+        return
+    if subscription.trial_ends_at is None:
+        return
+    if datetime.now(timezone.utc) >= subscription.trial_ends_at:
+        subscription.plan_tier = PlanTier.FREE
+        subscription.status = SubscriptionStatus.ACTIVE
+        user.company.plan_tier = PlanTier.FREE
+        await session.commit()
 
 
 async def get_current_user(
@@ -64,6 +81,8 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Empresa inativa. Entre em contato com o suporte.",
         )
+        
+    await _apply_trial_expiration(user, session)
 
     return user
 

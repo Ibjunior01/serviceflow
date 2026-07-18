@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.schemas.common import PaginatedResponse
 from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 from app.services.customer_service import customer_service
+from app.core.plan_limits import check_customer_limit
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -36,6 +37,7 @@ async def create_customer(
     db: AsyncSession = Depends(get_db),
 ):
     """Cria um novo cliente. OWNER/ADMIN apenas."""
+    await check_customer_limit(db, current_user.company)
     return await customer_service.create(db, company_id=current_user.company_id, data=payload)
 
 

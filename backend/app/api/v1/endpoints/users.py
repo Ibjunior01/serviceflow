@@ -9,6 +9,7 @@ from app.models.user import UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserCreate, UserResponse, UserRoleUpdate, UserUpdate
 from app.services.user_service import user_service
+from app.core.plan_limits import check_technician_limit
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -31,6 +32,9 @@ async def create_user(
     current_user: AdminOnly,
     db: AsyncSession = Depends(get_db),
 ):
+    role_value = payload.role.value if hasattr(payload.role, "value") else payload.role
+    if role_value == UserRole.TECHNICIAN.value:
+        await check_technician_limit(db, current_user.company)
     return await user_service.create(db, current_user.company_id, payload)
 
 

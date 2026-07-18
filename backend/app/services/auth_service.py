@@ -27,6 +27,7 @@ from app.schemas.company import CompanyCreate
 from app.schemas.user import UserResponse
 
 
+
 def _slugify(text: str) -> str:
     """Converte 'Friotech Soluções' → 'friotech-solucoes'"""
     text = normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
@@ -69,9 +70,9 @@ async def register(payload: CompanyCreate, session: AsyncSession) -> dict:
         document=payload.document,
         phone=payload.phone,
         email=payload.email,
-        plan_tier=PlanTier.FREE,
+        plan_tier=PlanTier.PRO,  # trial dá acesso nível Pro por 14 dias
         is_active=True,
-    )
+)
     session.add(company)
     await session.flush()
 
@@ -92,12 +93,12 @@ async def register(payload: CompanyCreate, session: AsyncSession) -> dict:
     now = datetime.now(timezone.utc)
     subscription = Subscription(
         company_id=company.id,
-        plan_tier=PlanTier.FREE,
+        plan_tier=PlanTier.PRO,
         status=SubscriptionStatus.TRIALING,
         trial_ends_at=now + timedelta(days=14),
         current_period_start=now,
         current_period_end=now + timedelta(days=14),
-    )
+)
     session.add(subscription)
 
     await session.commit()
