@@ -298,6 +298,7 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
                                     {...register('scheduled_at')}
                                     style={fieldStyle}
                                 />
+                                <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 0' }}>selecionar data e hora</p>
                             </div>
                         </div>
 
