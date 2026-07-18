@@ -71,5 +71,15 @@ class Company(UUIDMixin, TimestampMixin, Base):
         lazy="selectin",
     )
 
+
+    @property
+    def subscription_status(self) -> Optional[str]:
+        return self.subscription.status if self.subscription else None
+
+    @property
+    def trial_ends_at(self):
+        return self.subscription.trial_ends_at if self.subscription else None
+    
+
     def __repr__(self) -> str:
         return f"<Company id={self.id} slug={self.slug!r}>"

@@ -14,6 +14,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from .common import BaseSchema
 from app.models.company import PlanTier
+from app.models.subscription import SubscriptionStatus
 
 
 # ---------------------------------------------------------------------------
@@ -94,13 +95,20 @@ class CompanyUpdate(BaseSchema):
 # ---------------------------------------------------------------------------
 
 class CompanyResponse(CompanyBase):
-    """
-    Resposta completa da empresa.
-    Inclui campos gerados pelo banco / sistema.
-    """
-
     id: UUID
     plan_tier: PlanTier
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    subscription_status: Optional[str] = None
+    trial_ends_at: Optional[datetime] = None
+    
+    
+class PlanUsageResponse(BaseSchema):
+    plan_tier: PlanTier
+    technicians_used: int
+    technicians_limit: Optional[int]
+    orders_this_month_used: int
+    orders_this_month_limit: Optional[int]
+    customers_used: int
+    customers_limit: Optional[int]

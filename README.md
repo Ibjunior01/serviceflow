@@ -377,6 +377,9 @@ TechOrAbove  # OWNER + ADMIN + TECHNICIAN
 
 Novos tenants iniciam com 14 dias de trial no plano Free.
 
+
+
+
 ---
 
 ## Progresso das Fases

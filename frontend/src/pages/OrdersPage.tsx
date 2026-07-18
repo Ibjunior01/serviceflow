@@ -292,7 +292,7 @@ function CreateOrderModal({ onClose }: { onClose: () => void }) {
                                 </select>
                             </div>
                             <div>
-                                <label style={labelStyle}>Agendamento</label>
+                                <label style={labelStyle}>Data Agendamento</label>
                                 <input
                                     type="datetime-local"
                                     {...register('scheduled_at')}
