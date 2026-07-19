@@ -10,7 +10,7 @@ Rotas:
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,8 @@ from app.db.session import get_db
 from app.schemas.company import CompanyCreate
 from app.schemas.user import UserResponse
 from app.services import auth_service
+
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -55,6 +57,16 @@ class TokenResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Usuário autenticado",
+    description="Retorna os dados do usuário dono do access token.",
+)
+async def me(current_user: CurrentUser) -> UserResponse:
+    return UserResponse.model_validate(current_user)
+
+
 @router.post(
     "/register",
     response_model=AuthResponse,
@@ -65,7 +77,8 @@ class TokenResponse(BaseModel):
         "em uma única transação. Retorna tokens prontos para uso."
     ),
 )
-async def register(payload: CompanyCreate, session: Session) -> Any:
+@limiter.limit("5/minute")
+async def register(request: Request, payload: CompanyCreate, session: Session) -> Any:
     return await auth_service.register(payload, session)
 
 
@@ -75,7 +88,8 @@ async def register(payload: CompanyCreate, session: Session) -> Any:
     summary="Login",
     description="Autentica com e-mail e senha. Retorna access + refresh token.",
 )
-async def login(payload: LoginRequest, session: Session) -> Any:
+@limiter.limit("10/minute")
+async def login(request: Request, payload: LoginRequest, session: Session) -> Any:
     return await auth_service.login(payload.email, payload.password, session)
 
 
@@ -90,13 +104,3 @@ async def login(payload: LoginRequest, session: Session) -> Any:
 )
 async def refresh(payload: RefreshRequest, session: Session) -> Any:
     return await auth_service.refresh_tokens(payload.refresh_token, session)
-
-
-@router.get(
-    "/me",
-    response_model=UserResponse,
-    summary="Usuário autenticado",
-    description="Retorna os dados do usuário dono do access token.",
-)
-async def me(current_user: CurrentUser) -> UserResponse:
-    return UserResponse.model_validate(current_user)

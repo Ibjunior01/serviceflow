@@ -8,6 +8,11 @@ from app.core.exceptions import (
     NotFoundError, ConflictError, ForbiddenError,
     BusinessRuleError, UnauthorizedError,
 )
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limit import limiter
+
+from app.core.security_headers import SecurityHeadersMiddleware
 
 app = FastAPI(
     title="ServiceFlow API",
@@ -15,6 +20,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -22,6 +31,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.exception_handler(NotFoundError)
 async def not_found_handler(request: Request, exc: NotFoundError):
