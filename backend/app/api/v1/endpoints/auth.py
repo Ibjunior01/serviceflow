@@ -97,10 +97,7 @@ async def login(request: Request, payload: LoginRequest, session: Session) -> An
     "/refresh",
     response_model=TokenResponse,
     summary="Renovar tokens",
-    description=(
-        "Usa o refresh token para emitir um novo par de tokens (rotation). "
-        "O refresh token anterior é descartado."
-    ),
+
 )
 async def refresh(payload: RefreshRequest, session: Session) -> Any:
     return await auth_service.refresh_tokens(payload.refresh_token, session)

@@ -1,3 +1,6 @@
+from uuid import UUID
+from app.models.company import Company
+
 REGISTER_PAYLOAD = {
     "name": "Frigotech",
     "owner_name": "Jose Silva",
@@ -56,6 +59,43 @@ class TestLogin:
         )
         assert r.status_code == 401
 
+    async def test_inactive_user_cannot_login(
+        self,
+        async_client,
+        admin_headers,
+        tech_tokens,
+    ):
+        me_r = await async_client.get(
+            "/api/v1/auth/me",
+            headers={
+                "Authorization": f"Bearer {tech_tokens['access_token']}"
+            },
+        )
+        assert me_r.status_code == 200
+
+        user_id = me_r.json()["id"]
+
+        deactivate_r = await async_client.patch(
+            f"/api/v1/users/{user_id}",
+            json={
+                "is_active": False,
+            },
+            headers=admin_headers,
+        )
+
+        assert deactivate_r.status_code == 200, deactivate_r.text
+        assert deactivate_r.json()["is_active"] is False
+
+        login_r = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tech@empresa-a.com",
+                "password": "Senha123",
+            },
+        )
+
+        assert login_r.status_code == 403
+
 
 class TestRefreshToken:
     async def test_refresh_success(self, async_client, owner_tokens):
@@ -92,3 +132,130 @@ class TestMe:
             headers={"Authorization": "Bearer token.invalido"},
         )
         assert r.status_code == 401
+
+    async def test_inactive_user_token_is_rejected(
+        self,
+        async_client,
+        admin_headers,
+        tech_tokens,
+    ):
+        headers = {
+            "Authorization": f"Bearer {tech_tokens['access_token']}"
+        }
+
+        me_r = await async_client.get(
+            "/api/v1/auth/me",
+            headers=headers,
+        )
+        assert me_r.status_code == 200
+
+        user_id = me_r.json()["id"]
+
+        deactivate_r = await async_client.patch(
+            f"/api/v1/users/{user_id}",
+            json={
+                "is_active": False,
+            },
+            headers=admin_headers,
+        )
+
+        assert deactivate_r.status_code == 200, deactivate_r.text
+
+        blocked_r = await async_client.get(
+            "/api/v1/auth/me",
+            headers=headers,
+        )
+
+        assert blocked_r.status_code == 401
+
+class TestJwtSecurity:
+    async def test_access_token_cannot_be_used_as_refresh_token(
+        self,
+        async_client,
+        owner_tokens,
+    ):
+        r = await async_client.post(
+            "/api/v1/auth/refresh",
+            json={
+                "refresh_token": owner_tokens["access_token"],
+            },
+        )
+
+        assert r.status_code == 401
+
+    async def test_refresh_token_cannot_be_used_as_access_token(
+        self,
+        async_client,
+        owner_tokens,
+    ):
+        r = await async_client.get(
+            "/api/v1/auth/me",
+            headers={
+                "Authorization": (
+                    f"Bearer {owner_tokens['refresh_token']}"
+                )
+            },
+        )
+
+        assert r.status_code == 401
+
+    async def test_inactive_company_cannot_login(
+        self,
+        async_client,
+        owner_tokens,
+        db_session,
+    ):
+        company_id = UUID(
+            owner_tokens["user"]["company_id"]
+        )
+
+        company = await db_session.get(
+            Company,
+            company_id,
+        )
+
+        assert company is not None
+
+        company.is_active = False
+
+        await db_session.commit()
+
+        r = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "owner@empresa-a.com",
+                "password": "Senha123",
+            },
+        )
+
+        assert r.status_code == 403
+
+    async def test_inactive_company_cannot_refresh_session(
+        self,
+        async_client,
+        owner_tokens,
+        db_session,
+    ):
+        company_id = UUID(
+            owner_tokens["user"]["company_id"]
+        )
+
+        company = await db_session.get(
+            Company,
+            company_id,
+        )
+
+        assert company is not None
+
+        company.is_active = False
+
+        await db_session.commit()
+
+        r = await async_client.post(
+            "/api/v1/auth/refresh",
+            json={
+                "refresh_token": owner_tokens["refresh_token"],
+            },
+        )
+
+        assert r.status_code == 403

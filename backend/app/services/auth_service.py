@@ -135,8 +135,18 @@ async def login(email: str, password: str, session: AsyncSession) -> dict:
             detail="Usuário inativo.",
         )
 
+    if not user.company.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Empresa inativa. Entre em contato com o suporte.",
+        )
+
     tokens = TokenPair(
-        access_token=create_access_token(user.id, user.company_id, user.role),
+        access_token=create_access_token(
+            user.id,
+            user.company_id,
+            user.role
+        ),
         refresh_token=create_refresh_token(user.id),
     )
 
@@ -164,12 +174,26 @@ async def refresh_tokens(refresh_token: str, session: AsyncSession) -> dict:
     if user_id is None:
         raise credentials_exception
 
-    user = await session.get(User, UUID(user_id))
+    user = await session.get(
+        User,
+        UUID(user_id)
+    )
+
     if user is None or not user.is_active:
         raise credentials_exception
 
+    if not user.company.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Empresa inativa. Entre em contato com o suporte.",
+        )
+
     tokens = TokenPair(
-        access_token=create_access_token(user.id, user.company_id, user.role),
+        access_token=create_access_token(
+            user.id,
+            user.company_id,
+            user.role
+        ),
         refresh_token=create_refresh_token(user.id),
     )
 
