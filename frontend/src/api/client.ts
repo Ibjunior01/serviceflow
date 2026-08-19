@@ -12,64 +12,135 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   try {
     const raw = localStorage.getItem('sf-auth')
+
     if (raw) {
       const state = JSON.parse(raw)
       const token = state?.state?.accessToken
-      if (token) config.headers.Authorization = `Bearer ${token}`
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
-  } catch { }
+  } catch {
+    // Estado local inválido: requisição segue sem Authorization.
+  }
+
   return config
 })
 
+type RefreshQueueItem = {
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}
+
 let isRefreshing = false
-let queue: Array<(token: string) => void> = []
+let queue: RefreshQueueItem[] = []
+
+function resolveQueue(token: string) {
+  queue.forEach(({ resolve }) => resolve(token))
+  queue = []
+}
+
+function rejectQueue(error: unknown) {
+  queue.forEach(({ reject }) => reject(error))
+  queue = []
+}
+
+function clearAuthAndRedirect() {
+  localStorage.removeItem('sf-auth')
+
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
+}
 
 api.interceptors.response.use(
-  (res) => res,
+  (response) => response,
+
   async (error) => {
     const original = error.config
 
-    if (error.response?.status === 401 && !original._retry) {
-      original._retry = true
+    if (!original) {
+      return Promise.reject(error)
+    }
 
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          queue.push((token) => {
-            original.headers.Authorization = `Bearer ${token}`
-            resolve(api(original))
-          })
-        })
-      }
+    if (
+      error.response?.status !== 401 ||
+      original._retry
+    ) {
+      return Promise.reject(error)
+    }
 
-      isRefreshing = true
+    original._retry = true
+
+    if (isRefreshing) {
       try {
-        const raw = localStorage.getItem('sf-auth')
-        if (!raw) throw new Error('no token')
-        const state = JSON.parse(raw)
-        const refreshToken = state?.state?.refreshToken
-        if (!refreshToken) throw new Error('no refresh token')
+        const token = await new Promise<string>(
+          (resolve, reject) => {
+            queue.push({ resolve, reject })
+          },
+        )
 
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-          refresh_token: refreshToken,
-        })
+        original.headers.Authorization = `Bearer ${token}`
 
-        const current = JSON.parse(localStorage.getItem('sf-auth') || '{}')
-        current.state.accessToken = data.access_token
-        current.state.refreshToken = data.refresh_token
-        localStorage.setItem('sf-auth', JSON.stringify(current))
-
-        queue.forEach((cb) => cb(data.access_token))
-        queue = []
-        original.headers.Authorization = `Bearer ${data.access_token}`
         return api(original)
-      } catch {
-        localStorage.removeItem('sf-auth')
-        window.location.href = '/login'
-      } finally {
-        isRefreshing = false
+      } catch (queueError) {
+        return Promise.reject(queueError)
       }
     }
 
-    return Promise.reject(error)
-  }
+    isRefreshing = true
+
+    try {
+      const raw = localStorage.getItem('sf-auth')
+
+      if (!raw) {
+        throw new Error('Refresh token não disponível')
+      }
+
+      const persisted = JSON.parse(raw)
+      const refreshToken = persisted?.state?.refreshToken
+
+      if (!refreshToken) {
+        throw new Error('Refresh token não disponível')
+      }
+
+      const { data } = await axios.post(
+        `${API_BASE_URL}/auth/refresh`,
+        {
+          refresh_token: refreshToken,
+        },
+      )
+
+      const currentRaw = localStorage.getItem('sf-auth')
+
+      if (!currentRaw) {
+        throw new Error('Estado de autenticação não disponível')
+      }
+
+      const current = JSON.parse(currentRaw)
+
+      current.state.accessToken = data.access_token
+      current.state.refreshToken = data.refresh_token
+
+      localStorage.setItem(
+        'sf-auth',
+        JSON.stringify(current),
+      )
+
+      resolveQueue(data.access_token)
+
+      original.headers.Authorization =
+        `Bearer ${data.access_token}`
+
+      return api(original)
+    } catch (refreshError) {
+      rejectQueue(refreshError)
+      clearAuthAndRedirect()
+
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
+  },
 )
