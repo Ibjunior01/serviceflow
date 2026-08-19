@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from app.main import app
 from app.db.session import get_db
 from app.models import Base
+from app.core.rate_limit import limiter
+limiter.enabled = False
+
 
 TEST_DATABASE_URL = os.getenv(
     "DATABASE_URL",
