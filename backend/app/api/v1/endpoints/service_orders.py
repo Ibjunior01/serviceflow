@@ -34,12 +34,13 @@ async def list_orders(
     return await service_order_service.list(
         db,
         company_id=current_user.company_id,
+        requesting_user=current_user,
         skip=(page - 1) * page_size,
         limit=page_size,
         status=status,
         technician_id=technician_id,
         customer_id=customer_id,
-    )
+)
 
 
 @router.post("", response_model=ServiceOrderResponse, status_code=201)
@@ -60,7 +61,12 @@ async def get_order(
     current_user: TechOrAbove,
     db: AsyncSession = Depends(get_db),
 ):
-    order = await service_order_service.get_or_404(db, order_id, current_user.company_id)
+    order = await service_order_service.get_accessible_or_404(
+        db,
+        order_id,
+        current_user.company_id,
+        current_user,
+)
     return ServiceOrderResponse(
         id=order.id,
         order_number=order.order_number,
@@ -131,7 +137,12 @@ async def list_items(
     current_user: TechOrAbove,
     db: AsyncSession = Depends(get_db),
 ):
-    order = await service_order_service.get_or_404(db, order_id, current_user.company_id)
+    order = await service_order_service.get_accessible_or_404(
+        db,
+        order_id,
+        current_user.company_id,
+        current_user,
+)
     return order.items
 
 

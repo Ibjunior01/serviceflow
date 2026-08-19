@@ -11,7 +11,15 @@ from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, Integer
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    Integer,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -45,6 +53,14 @@ class ServiceOrder(UUIDMixin, TimestampMixin, Base):
     """
     __tablename__ = "service_orders"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "order_number",
+            name="uq_service_orders_company_order_number",
+        ),
+    )
+
     # Tenant + Relacionamentos principais
     company_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
@@ -65,7 +81,6 @@ class ServiceOrder(UUIDMixin, TimestampMixin, Base):
     # Identificação
     order_number: Mapped[int] = mapped_column(
         Integer, 
-        unique=True,
         nullable=False,
         index=True,
         comment="Ex: OS-2024-00042 (gerado no service layer)",
