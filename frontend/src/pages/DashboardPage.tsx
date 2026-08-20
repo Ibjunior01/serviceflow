@@ -1,7 +1,7 @@
 ﻿import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import { ordersApi } from '@/api/orders'
+import { dashboardApi } from '@/api/dashboard'
 import type { ServiceOrder } from '@/api/orders'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -49,38 +49,35 @@ export default function DashboardPage() {
     const user = useAuthStore((s) => s.user)
 
     const { data, isLoading } = useQuery({
-        queryKey: ['orders', 'dashboard'],
-        queryFn: () => ordersApi.list({ page: 1, page_size: 50 }),
+        queryKey: ['dashboard', 'summary'],
+        queryFn: async () => {
+            const response = await dashboardApi.getSummary()
+            return response.data
+        },
     })
 
-    const orders = data?.data.items ?? []
-
     const countByStatus = (status: ServiceOrder['status']) =>
-        orders.filter((o) => o.status === status).length
+        data?.status_counts[status] ?? 0
 
-    const recent = orders.slice(0, 8)
+    const recent = data?.recent_orders ?? []
 
-    //função do gráfico
-    const monthlyData = (() => {
-        const now = new Date()
-        const months: { key: string; label: string; count: number }[] = []
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-            months.push({
-                key: `${d.getFullYear()}-${d.getMonth()}`,
-                label: d.toLocaleDateString('pt-BR', { month: 'short' }),
-                count: 0,
-            })
-        }
-        orders.forEach((o) => {
-            if (!o.created_at) return
-            const d = new Date(o.created_at)
-            const key = `${d.getFullYear()}-${d.getMonth()}`
-            const bucket = months.find((m) => m.key === key)
-            if (bucket) bucket.count += 1
-        })
-        return months
-    })()
+    const monthlyData =
+        data?.monthly_orders.map((point) => {
+            const date = new Date(
+                point.year,
+                point.month - 1,
+                1,
+            )
+
+            return {
+                key: `${point.year}-${point.month}`,
+                label: date.toLocaleDateString(
+                    'pt-BR',
+                    { month: 'short' },
+                ),
+                count: point.count,
+            }
+        }) ?? []
 
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'

@@ -2,7 +2,7 @@
 ServiceFlow — Dependencies FastAPI.
 """
 
-from typing import Annotated
+from typing import Annotated, TypeAlias
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -87,20 +87,61 @@ async def get_current_user(
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser: TypeAlias = Annotated[
+    User,
+    Depends(get_current_user),
+]
 
 
 def require_roles(*roles: UserRole):
-    async def _guard(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Cria uma dependency que restringe o acesso
+    aos perfis informados.
+    """
+
+    async def _guard(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permissão negada. Roles permitidas: {[r.value for r in roles]}",
+                detail=(
+                    "Permissão negada. "
+                    f"Roles permitidas: {[role.value for role in roles]}"
+                ),
             )
+
         return current_user
-    return Annotated[User, Depends(_guard)]
+
+    return _guard
 
 
-AdminOnly   = require_roles(UserRole.OWNER, UserRole.ADMIN)
-OwnerOnly   = require_roles(UserRole.OWNER)
-TechOrAbove = require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.TECHNICIAN)
+AdminOnly: TypeAlias = Annotated[
+    User,
+    Depends(
+        require_roles(
+            UserRole.OWNER,
+            UserRole.ADMIN,
+        )
+    ),
+]
+
+OwnerOnly: TypeAlias = Annotated[
+    User,
+    Depends(
+        require_roles(
+            UserRole.OWNER,
+        )
+    ),
+]
+
+TechOrAbove: TypeAlias = Annotated[
+    User,
+    Depends(
+        require_roles(
+            UserRole.OWNER,
+            UserRole.ADMIN,
+            UserRole.TECHNICIAN,
+        )
+    ),
+]

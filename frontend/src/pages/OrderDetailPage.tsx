@@ -94,11 +94,24 @@ export default function OrderDetailPage() {
     })
 
     const statusMutation = useMutation({
-        mutationFn: (status: ServiceOrderDetail['status']) =>
-            ordersApi.updateStatus(id!, status),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['order', id] })
-            queryClient.invalidateQueries({ queryKey: ['orders'] })
+    mutationFn: (status: ServiceOrderDetail['status']) =>
+        ordersApi.updateStatus(id!, status),
+
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: ['order', id],
+                }),
+
+                queryClient.invalidateQueries({
+                    queryKey: ['orders'],
+                }),
+
+                queryClient.invalidateQueries({
+                    queryKey: ['dashboard'],
+                }),
+            ])
+
             setStatusMenuOpen(false)
         },
     })
