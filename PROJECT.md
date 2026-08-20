@@ -3,8 +3,8 @@
 ## Sessão atual
 
 **Data de referência:** 20/08/2026  
-**Fase:** Hardening técnico e preparação para portfólio  
-**Status:** aplicação publicada e funcional, com frontend na Vercel, backend no Render e PostgreSQL no Neon. Migração de banco concluída e validada funcionalmente. Backend com 86 testes aprovados e frontend com build, TypeScript e auditoria de dependências validados.
+**Fase:** Hardening técnico concluído; próxima fase: dashboard e agregações  
+**Status:** aplicação publicada e funcional, com frontend na Vercel, backend no Render e PostgreSQL no Neon. Migração de banco concluída. ETAPA 7 de segurança concluída para o escopo atual. Backend com 86 testes aprovados e frontend com build, TypeScript, npm audit e CSP bloqueante validados.
 
 ### URLs de produção
 
@@ -519,42 +519,99 @@ X-Frame-Options: DENY
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=()
 Strict-Transport-Security
-Content-Security-Policy-Report-Only
+Content-Security-Policy
 ```
 
-Commit relacionado:
+## CSP e Zod
+
+A CSP iniciou em modo `Report-Only`.
+
+Durante a validação foi detectada execução de `Function(...)`. A origem principal identificada foi o mecanismo JIT do Zod 4.4.3.
+
+Foi criado um wrapper central:
+
+```ts
+import { z } from 'zod'
+
+z.config({
+  jitless: true,
+})
+
+export { z }
+```
+
+Os imports diretos usados nas páginas de ordens passaram a utilizar esse wrapper.
+
+Validações após a alteração:
 
 ```text
-549be3a chore: harden frontend dependencies and security headers
+TypeScript             OK
+Build Vite             OK
+npm audit              0 vulnerabilities
+unsafe-eval runtime    não reproduzido
 ```
 
-## CSP
+A política foi então promovida para `Content-Security-Policy` bloqueante, sem adicionar `unsafe-eval`.
 
-A CSP permanece em:
+Fluxos validados em produção:
+
+- login;
+- dashboard;
+- clientes;
+- criação de cliente;
+- ordens;
+- criação de OS;
+- detalhe da OS;
+- inclusão de item;
+- alteração de status.
+
+Resultado:
 
 ```text
-Content-Security-Policy-Report-Only
+CSP bloqueante ativa
+Aplicação funcional
+Console sem violações CSP
 ```
 
-Durante teste em produção foi observado:
+## Decisão final sobre JWT no frontend
+
+Os tokens permanecem no `localStorage`.
+
+A ausência de revogação server-side, token family, `jti` persistido e logout server-side real permanece como limitação conhecida do MVP/portfólio.
+
+Não foi criada uma rota `/logout` sem capacidade efetiva de revogação.
+
+Antes de cenários comerciais mais sensíveis, a arquitetura de sessão deverá ser reavaliada de forma conjunta, incluindo cookie `HttpOnly`, CSRF, refresh server-side e revogação.
+
+## Secrets e credenciais
+
+Foi executada busca no Git por `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, host Neon e URLs públicas.
+
+Resultado:
+
+- nenhuma credencial real do Neon foi encontrada versionada;
+- nenhum host real `*.neon.tech` foi encontrado no Git;
+- URLs públicas do Render aparecem apenas onde esperado;
+- `.env.test` utiliza apenas valores locais/de teste;
+- a `SECRET_KEY` de teste foi deixada explicitamente fictícia e não reutilizável em produção.
+
+## Resultado da ETAPA 7
 
 ```text
-Evaluating a string as JavaScript violates ...
-script-src 'self'
-unsafe-eval
+JWT básico                      OK
+Empresa inativa                 OK
+Fila de refresh                 OK
+Dependências                    OK
+Headers                         OK
+CSP bloqueante                  OK
+Zod jitless                     OK
+Credenciais produção no Git     NÃO ENCONTRADAS
+localStorage                    LIMITAÇÃO DOCUMENTADA
+Revogação server-side           ROADMAP
+Logout server-side real         ROADMAP
 ```
 
-Como a política está em Report-Only, a aplicação não foi bloqueada.
-
-Não adicionar `unsafe-eval` para apenas silenciar a violação.
-
-Próximo trabalho de segurança:
-
-1. identificar a origem;
-2. verificar se é dependência ou código próprio;
-3. remover/mitigar quando possível;
-4. retestar produção;
-5. só então avaliar CSP bloqueante.
+**ETAPA 7 concluída para o escopo atual.**
 
 ---
 
@@ -696,14 +753,15 @@ Commit anterior:
 5afaee7 docs: sync serviceflow technical documentation
 ```
 
-Após a migração para Neon, os documentos precisam registrar:
+Após a migração para Neon e o fechamento da ETAPA 7, os documentos registram:
 
 - Neon como PostgreSQL de produção;
 - 86 testes;
-- status da segurança;
-- CSP Report-Only;
+- CSP bloqueante;
+- Zod em modo `jitless`;
+- decisão sobre `localStorage`, refresh e logout;
 - migração validada;
-- limitações atuais.
+- limitações e roadmap atuais.
 
 ---
 
@@ -799,9 +857,9 @@ ETAPA 2   order_number multi-tenant           CONCLUÍDA
 ETAPA 3   HTTP 500 nos testes                 CONCLUÍDA
 ETAPA 4   Escopo TECHNICIAN                   CONCLUÍDA
 ETAPA 5   Estabilização da suíte              CONCLUÍDA
-ETAPA 6   README / PROJECT                    CONCLUÍDA / ATUALIZANDO
-ETAPA 7   Segurança JWT                       EM ANDAMENTO
-ETAPA 8   Dashboard / agregações              PENDENTE
+ETAPA 6   README / PROJECT                    CONCLUÍDA
+ETAPA 7   Segurança e hardening               CONCLUÍDA
+ETAPA 8   Dashboard / agregações              PRÓXIMA
 ETAPA 9   Limpeza técnica                     PENDENTE
 ETAPA 10  CI                                  PENDENTE
 ETAPA 11  Revisão final para portfólio        PENDENTE
@@ -817,29 +875,23 @@ Migração Render PostgreSQL → Neon             CONCLUÍDA
 
 # 17. Próxima ação recomendada
 
-Retomar a ETAPA 7 exatamente no ponto:
+Iniciar a ETAPA 8:
 
 ```text
-CSP Report-Only
+auditar dashboard atual
 ↓
-identificar origem de unsafe-eval
+identificar KPIs e fontes
 ↓
-corrigir/mitigar
+criar agregações no backend
 ↓
-validar produção
+adicionar testes
 ↓
-avaliar CSP bloqueante
+ajustar frontend
+↓
+validar comportamento com volume superior ao limite atual de 50 OS
 ```
 
-Depois concluir a classificação de:
-
-- `localStorage`;
-- refresh token server-side;
-- logout server-side;
-- proteção XSS;
-- secrets/logs.
-
-Somente depois seguir para ETAPA 8.
+Não iniciar a ETAPA 9 antes de estabilizar o dashboard.
 
 ---
 
@@ -885,6 +937,8 @@ GET /health             200 OK
 CORS                    OK
 Neon PostgreSQL         OK
 Alembic                 3e89efe30105
+CSP bloqueante          OK
+Console CSP             sem violações nos fluxos validados
 ```
 
 ---

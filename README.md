@@ -393,7 +393,9 @@ O logout atual remove os tokens no cliente, porém o backend não mantém:
 
 A emissão de um novo refresh token não invalida automaticamente o anterior.
 
-A migração para estratégia server-side e/ou cookie `HttpOnly` permanece como hardening futuro antes de cenários comerciais mais sensíveis.
+Para o escopo atual de MVP/portfólio, `localStorage`, logout client-side e ausência de revogação server-side foram mantidos como limitações documentadas.
+
+Antes de cenários comerciais mais sensíveis, recomenda-se avaliar em conjunto refresh token server-side, revogação de sessão, `jti`/token family, detecção de reuse, cookie `HttpOnly`, estratégia CSRF e logout server-side real. Não foi criada uma rota de logout sem capacidade real de revogação.
 
 ---
 
@@ -413,9 +415,11 @@ Controles atualmente presentes:
 - tratamento centralizado de exceções;
 - validação Pydantic;
 - headers HTTP de segurança;
-- CSP em modo `Report-Only`;
+- CSP bloqueante;
+- Zod configurado em modo `jitless`;
 - auditoria de dependências frontend;
-- fila de refresh concorrente tratada.
+- fila de refresh concorrente tratada;
+- revisão de credenciais versionadas.
 
 ### Headers validados em produção
 
@@ -425,14 +429,28 @@ X-Frame-Options: DENY
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=()
 Strict-Transport-Security
-Content-Security-Policy-Report-Only
+Content-Security-Policy
 ```
 
-A CSP ainda não está em modo bloqueante.
+### Content Security Policy
 
-Durante a validação foi observada uma violação `unsafe-eval` em JavaScript de produção. A origem ainda precisa ser investigada antes de promover a política para `Content-Security-Policy`.
+A CSP está ativa em modo bloqueante em produção e não permite `unsafe-eval`.
 
-Não deve ser adicionada permissão `unsafe-eval` apenas para ocultar o alerta.
+Durante o hardening foi identificada uma tentativa de uso de `Function(...)` pelo mecanismo JIT do Zod 4.4.3. O frontend foi configurado com:
+
+```ts
+import { z } from 'zod'
+
+z.config({
+  jitless: true,
+})
+
+export { z }
+```
+
+Após a alteração, login, dashboard, clientes, ordens, criação de OS, detalhe da OS, inclusão de item e alteração de status foram validados em produção com o Console do navegador sem violações CSP.
+
+O `'unsafe-inline'` permanece temporariamente apenas em `style-src`.
 
 ---
 
@@ -834,14 +852,24 @@ A mudança de provedor não exigiu alteração da arquitetura lógica, pois o si
 
 ## Segurança
 
-- [ ] Investigar `unsafe-eval` reportado pela CSP
-- [ ] Validar CSP em produção e avaliar modo bloqueante
-- [ ] Avaliar refresh token server-side
-- [ ] Avaliar blacklist, `jti` ou token families
-- [ ] Revisar armazenamento de JWT no frontend
-- [ ] Avaliar cookie `HttpOnly`
-- [ ] Implementar logout com revogação server-side antes de cenários mais sensíveis
-- [ ] Revisar secrets e logs no fechamento do hardening
+Concluído:
+
+- [x] investigar origem do `unsafe-eval`;
+- [x] configurar Zod em modo `jitless`;
+- [x] validar CSP em produção;
+- [x] ativar CSP bloqueante;
+- [x] validar aplicação com CSP bloqueante;
+- [x] revisar secrets/credenciais versionadas;
+- [x] manter credenciais reais de produção fora do Git.
+
+Roadmap:
+
+- [ ] avaliar refresh token server-side;
+- [ ] avaliar blacklist, `jti` ou token families;
+- [ ] revisar armazenamento de JWT antes de cenários mais sensíveis;
+- [ ] avaliar cookie `HttpOnly`;
+- [ ] implementar logout com revogação real caso sessões server-side sejam adotadas;
+- [ ] reduzir dependência de `style-src 'unsafe-inline'` quando apropriado.
 
 ## Dashboard
 
@@ -906,6 +934,8 @@ Render /health          200 OK
 CORS                     OK
 Neon PostgreSQL          OK
 Alembic head             3e89efe30105
+CSP bloqueante           OK
+Console CSP              sem violações nos fluxos validados
 ```
 
 ---
@@ -914,4 +944,4 @@ Alembic head             3e89efe30105
 
 O ServiceFlow está funcional e publicado, com arquitetura multi-tenant, autenticação, RBAC, regras de negócio, migrations e testes automatizados.
 
-O trabalho atual está concentrado em **hardening técnico e preparação do case para portfólio**, e não na expansão indiscriminada de funcionalidades.
+A **ETAPA 7 — Segurança e hardening** está concluída para o escopo atual. O próximo trabalho técnico é a **ETAPA 8 — Dashboard e agregações**, seguida de limpeza técnica, CI e revisão final para portfólio.
