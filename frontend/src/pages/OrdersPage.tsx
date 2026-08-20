@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { z } from '../lib/zod'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { ordersApi, type ServiceOrder } from '@/api/orders'

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { z } from '../lib/zod'
 import { ordersApi } from '@/api/orders'
 import type { ServiceOrderDetail } from '@/api/orders'
 
