@@ -104,7 +104,7 @@ export default function UsersPage() {
             toast.success('Usuário criado com sucesso.')
             setDialogOpen(false)
         } catch {
-            toast.success('Erro ao criar usuário.')
+            toast.error('Erro ao criar usuário.')
         }
     }
 
@@ -115,7 +115,7 @@ export default function UsersPage() {
             toast.success('Perfil atualizado.')
             setRoleDialogUser(null)
         } catch {
-            toast.success('Erro ao alterar perfil.')
+            toast.error('Erro ao alterar perfil.')
         }
     }
 
@@ -125,7 +125,7 @@ export default function UsersPage() {
             await deleteMutation.mutateAsync(deletingId)
             toast.success('Usuário removido.')
         } catch {
-            toast.success('Erro ao remover usuário.')
+            toast.error('Erro ao remover usuário.')
         } finally {
             setDeletingId(null)
         }

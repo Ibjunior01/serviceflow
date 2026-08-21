@@ -53,7 +53,7 @@ function CompanySection() {
             await updateMutation.mutateAsync(form)
             toast.success('Dados da empresa atualizados.')
         } catch {
-            toast.success('Erro ao salvar.')
+            toast.error('Erro ao salvar.')
         }
     }
 
@@ -109,7 +109,7 @@ function ProfileSection() {
             setUser(data)
             toast.success('Perfil atualizado.')
         } catch {
-            toast.success('Erro ao salvar perfil.')
+            toast.error('Erro ao salvar perfil.')
         } finally {
             setSaving(false)
         }
