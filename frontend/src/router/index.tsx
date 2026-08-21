@@ -1,35 +1,157 @@
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
+import { lazy, Suspense, type ReactNode } from 'react'
+import {
+    createBrowserRouter,
+    Navigate,
+    Outlet,
+} from 'react-router-dom'
+
 import AppLayout from '@/components/layout/AppLayout'
-import LoginPage from '@/pages/LoginPage'
-import RegisterPage from '@/pages/RegisterPage'
-import DashboardPage from '@/pages/DashboardPage'
-import OrdersPage from '@/pages/OrdersPage'
-import OrderDetailPage from '@/pages/OrderDetailPage'
-import CustomersPage from '@/pages/CustomersPage'
-import UsersPage from '@/pages/UsersPage'
-import SettingsPage from '@/pages/SettingsPage'
+import { useAuthStore } from '@/store/authStore'
+
+
+const LoginPage = lazy(
+    () => import('@/pages/LoginPage'),
+)
+
+const RegisterPage = lazy(
+    () => import('@/pages/RegisterPage'),
+)
+
+const DashboardPage = lazy(
+    () => import('@/pages/DashboardPage'),
+)
+
+const OrdersPage = lazy(
+    () => import('@/pages/OrdersPage'),
+)
+
+const OrderDetailPage = lazy(
+    () => import('@/pages/OrderDetailPage'),
+)
+
+const CustomersPage = lazy(
+    () => import('@/pages/CustomersPage'),
+)
+
+const UsersPage = lazy(
+    () => import('@/pages/UsersPage'),
+)
+
+const SettingsPage = lazy(
+    () => import('@/pages/SettingsPage'),
+)
+
 
 function ProtectedRoute() {
-    const token = useAuthStore((s) => s.accessToken)
-    return token ? <Outlet /> : <Navigate to="/login" replace />
+    const token = useAuthStore(
+        (state) => state.accessToken,
+    )
+
+    return token
+        ? <Outlet />
+        : <Navigate to="/login" replace />
 }
 
+
+function LazyRoute({
+    children,
+}: {
+    children: ReactNode
+}) {
+    return (
+        <Suspense
+            fallback={
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: '200px',
+                        color: '#64748b',
+                        fontSize: '14px',
+                    }}
+                >
+                    Carregando...
+                </div>
+            }
+        >
+            {children}
+        </Suspense>
+    )
+}
+
+
 export const router = createBrowserRouter([
-    { path: '/login', element: <LoginPage /> },
-    { path: '/register', element: <RegisterPage /> },
+    {
+        path: '/login',
+        element: (
+            <LazyRoute>
+                <LoginPage />
+            </LazyRoute>
+        ),
+    },
+    {
+        path: '/register',
+        element: (
+            <LazyRoute>
+                <RegisterPage />
+            </LazyRoute>
+        ),
+    },
     {
         element: <ProtectedRoute />,
         children: [
             {
                 element: <AppLayout />,
                 children: [
-                    { path: '/', element: <DashboardPage /> },
-                    { path: '/orders', element: <OrdersPage /> },
-                    { path: '/orders/:id', element: <OrderDetailPage /> },
-                    { path: '/customers', element: <CustomersPage /> },
-                    { path: '/users', element: <UsersPage /> },
-                    { path: '/settings', element: <SettingsPage /> },
+                    {
+                        path: '/',
+                        element: (
+                            <LazyRoute>
+                                <DashboardPage />
+                            </LazyRoute>
+                        ),
+                    },
+                    {
+                        path: '/orders',
+                        element: (
+                            <LazyRoute>
+                                <OrdersPage />
+                            </LazyRoute>
+                        ),
+                    },
+                    {
+                        path: '/orders/:id',
+                        element: (
+                            <LazyRoute>
+                                <OrderDetailPage />
+                            </LazyRoute>
+                        ),
+                    },
+                    {
+                        path: '/customers',
+                        element: (
+                            <LazyRoute>
+                                <CustomersPage />
+                            </LazyRoute>
+                        ),
+                    },
+                    {
+                        path: '/users',
+                        element: (
+                            <LazyRoute>
+                                <UsersPage />
+                            </LazyRoute>
+                        ),
+                    },
+                    {
+                        path: '/settings',
+                        element: (
+                            <LazyRoute>
+                                <SettingsPage />
+                            </LazyRoute>
+                        ),
+                    },
                 ],
             },
         ],
