@@ -2,9 +2,9 @@
 
 ## Sessão atual
 
-**Data de referência:** 20/08/2026  
-**Fase:** Hardening técnico concluído; próxima fase: dashboard e agregações  
-**Status:** aplicação publicada e funcional, com frontend na Vercel, backend no Render e PostgreSQL no Neon. Migração de banco concluída. ETAPA 7 de segurança concluída para o escopo atual. Backend com 86 testes aprovados e frontend com build, TypeScript, npm audit e CSP bloqueante validados.
+**Data de referência:** 21/08/2026
+**Fase:** hardening, dashboard, limpeza técnica e CI concluídos; próxima fase: revisão final para portfólio.
+**Status:** aplicação publicada e funcional, com frontend na Vercel, backend no Render e PostgreSQL no Neon. A suíte backend possui 90 testes aprovados. O frontend está com TypeScript, build, auditoria de dependências, CSP bloqueante e code splitting validados. O GitHub Actions executa CI de backend e frontend com sucesso.
 
 ### URLs de produção
 
@@ -21,17 +21,17 @@ O ServiceFlow é um SaaS B2B de Field Service Management voltado inicialmente pa
 
 O projeto é utilizado como case de portfólio Full Stack.
 
-A prioridade atual não é adicionar funcionalidades indiscriminadamente.
+A prioridade nesta fase é manter consistência entre código, testes, migrations e documentação, com foco em:
 
-O foco é:
-
-- consistência entre código, testes, migrations e documentação;
 - isolamento multi-tenant;
-- autorização;
+- autorização e RBAC;
+- regras de negócio;
 - segurança;
 - qualidade da suíte;
 - arquitetura;
 - infraestrutura;
+- observabilidade básica por health check;
+- CI;
 - preparação do case profissional.
 
 ---
@@ -49,8 +49,8 @@ O foco é:
 - Pydantic v2;
 - JWT;
 - passlib + bcrypt;
-- pytest;
-- pytest-asyncio;
+- pytest 9.1.1;
+- pytest-asyncio 1.4.0;
 - httpx.
 
 ## Frontend
@@ -65,9 +65,10 @@ O foco é:
 - Axios;
 - React Hook Form;
 - Zod;
-- Recharts.
+- Recharts;
+- React Router.
 
-## Infraestrutura atual
+## Infraestrutura
 
 ```text
 Vercel
@@ -82,14 +83,13 @@ Neon
 PostgreSQL
 ```
 
-## Desenvolvimento / validação local
-
-Último ambiente validado:
+## Validação local mais recente
 
 ```text
 Windows
 Python 3.14.6
-pytest 8.3.5
+pytest 9.1.1
+pytest-asyncio 1.4.0
 PostgreSQL 16 local
 Node 24.19.0
 npm 11.17.0
@@ -119,33 +119,32 @@ SQLAlchemy Async
 PostgreSQL
 ```
 
-Essa arquitetura continua adequada ao porte e ao estágio atual.
-
-Não há justificativa para microservices neste momento.
+A arquitetura continua adequada ao porte e ao estágio atual. Não há justificativa técnica para microservices neste momento.
 
 ---
 
 # 4. Estado funcional comprovado
 
 ```text
-Backend FastAPI                 IMPLEMENTADO
-Frontend React                  IMPLEMENTADO
-PostgreSQL                      IMPLEMENTADO
-Alembic                         IMPLEMENTADO
-JWT                             IMPLEMENTADO
-RBAC OWNER/ADMIN/TECHNICIAN     IMPLEMENTADO
-RBAC VIEWER                     PARCIALMENTE IMPLEMENTADO
-Multi-tenancy                   IMPLEMENTADO
-FSM de Ordens                   IMPLEMENTADO
-Trial PRO                       IMPLEMENTADO
-Downgrade FREE                  IMPLEMENTADO
-Limites FREE                    IMPLEMENTADO
-Dashboard                       IMPLEMENTADO COM LIMITAÇÃO
-Deploy                          IMPLEMENTADO
-Security headers                IMPLEMENTADO
-CSP bloqueante                  NÃO IMPLEMENTADA
-CI                              NÃO IMPLEMENTADO
-Revogação server-side JWT       NÃO IMPLEMENTADA
+Backend FastAPI                     IMPLEMENTADO
+Frontend React                      IMPLEMENTADO
+PostgreSQL                          IMPLEMENTADO
+Alembic                             IMPLEMENTADO
+JWT                                 IMPLEMENTADO
+RBAC OWNER/ADMIN/TECHNICIAN         IMPLEMENTADO
+RBAC VIEWER                         PARCIALMENTE IMPLEMENTADO
+Multi-tenancy                       IMPLEMENTADO
+FSM de Ordens                       IMPLEMENTADO
+Trial PRO                           IMPLEMENTADO
+Downgrade FREE                      IMPLEMENTADO
+Limites FREE                        IMPLEMENTADO
+Dashboard agregado                  IMPLEMENTADO
+Deploy                              IMPLEMENTADO
+Security headers                    IMPLEMENTADO
+CSP bloqueante                      IMPLEMENTADO
+Code splitting por rota             IMPLEMENTADO
+CI GitHub Actions                   IMPLEMENTADO
+Revogação server-side JWT           NÃO IMPLEMENTADA
 ```
 
 ---
@@ -154,13 +153,11 @@ Revogação server-side JWT       NÃO IMPLEMENTADA
 
 ## 5.1 Numeração das ordens
 
-A unicidade é:
+A unicidade é definida por:
 
 ```text
 (company_id, order_number)
 ```
-
-O model e a migration estão alinhados.
 
 É permitido:
 
@@ -173,7 +170,7 @@ Não é permitido duplicar o mesmo `order_number` dentro da mesma empresa.
 
 A geração atual utiliza `MAX(order_number) + 1` por empresa.
 
-Risco conhecido: concorrência simultânea pode gerar colisão. A constraint preserva integridade, porém uma requisição concorrente pode falhar. Hardening futuro recomendado.
+**Risco conhecido:** concorrência simultânea pode gerar colisão. A constraint preserva a integridade do banco, mas uma requisição concorrente pode falhar. Hardening futuro recomendado.
 
 ## 5.2 Máquina de estados
 
@@ -224,9 +221,7 @@ O técnico não pode reatribuir sua própria OS para outro técnico.
 
 ## 5.4 VIEWER
 
-O enum existe no domínio.
-
-A política funcional específica ainda não foi definida integralmente.
+O enum existe no domínio, porém a política funcional específica ainda não foi formalizada integralmente.
 
 Status:
 
@@ -293,93 +288,59 @@ Ordens de serviço   10 por mês
 
 Concluída.
 
-Achados principais:
+Principais achados originais:
 
 - drift entre model e migration de `order_number`;
 - testes aceitando HTTP 500;
 - regra TECHNICIAN inconsistente;
-- divergências README / código;
+- divergências entre documentação e código;
 - risco de concorrência em numeração;
 - limitações JWT;
 - dashboard limitado a 50 registros;
-- itens residuais de frontend;
+- itens residuais no frontend;
 - política VIEWER incompleta.
-
----
 
 ## ETAPA 2 — `order_number` multi-tenant
 
 Concluída.
 
-Alterações:
-
 - removida unicidade global;
 - adicionada `UniqueConstraint("company_id", "order_number")`;
-- model alinhado à migration existente;
-- testes para duplicidade no mesmo tenant;
+- model alinhado à migration;
+- testes de duplicidade no mesmo tenant;
 - testes permitindo mesmo número em tenants diferentes.
 
-Migration correspondente:
+Migration:
 
 ```text
 3e89efe30105
 order_number unique per company
 ```
 
-Commit:
-
-```text
-4e0dda4 fix: enforce service order tenant and technician scope
-```
-
----
-
-## ETAPA 3 — testes aceitando HTTP 500
+## ETAPA 3 — HTTP 500 nos testes
 
 Concluída.
 
-Os asserts que aceitavam `(200, 500)` foram substituídos pelo contrato HTTP esperado.
-
-HTTP 500 não é mais tratado como comportamento válido nesses testes.
-
----
+Os asserts que aceitavam `(200, 500)` foram substituídos pelos contratos HTTP esperados.
 
 ## ETAPA 4 — acesso TECHNICIAN
 
 Concluída.
-
-Regra escolhida:
 
 ```text
 OWNER / ADMIN → todas as OS do tenant
 TECHNICIAN    → apenas OS atribuídas a ele
 ```
 
-Cobertura adicionada para:
-
-- listagem;
-- detalhe;
-- status;
-- itens;
-- tentativa de reatribuição.
-
-Commit relacionado:
-
-```text
-4e0dda4 fix: enforce service order tenant and technician scope
-```
-
----
+Cobertura adicionada para listagem, detalhe, status, itens e tentativa de reatribuição.
 
 ## ETAPA 5 — estabilização da suíte
 
 Concluída.
 
-O rate limiter permanece ativo em runtime.
+O rate limiter permanece ativo em runtime e é desabilitado na suíte geral para evitar interferência de contadores globais entre testes não relacionados ao rate limiting.
 
-Na suíte geral ele é desabilitado para evitar interferência de contadores globais entre testes não relacionados ao rate limiting.
-
-Foram adicionados testes de:
+Cobertura inclui:
 
 - usuário inativo;
 - empresa inativa;
@@ -387,20 +348,14 @@ Foram adicionados testes de:
 - downgrade;
 - limites FREE.
 
-Commit:
+Estado atual:
 
 ```text
-36f6d23 test: add plan limits and stable test environment
+90 passed
+2 warnings
 ```
 
-Última suíte completa:
-
-```text
-86 passed
-5123 warnings
-```
-
-Os warnings são principalmente dívida técnica de compatibilidade/depreciação e serão tratados na etapa de limpeza.
+Os dois warnings restantes são de depreciação originados no SlowAPI sob Python 3.14. Não são mascarados.
 
 ---
 
@@ -415,25 +370,16 @@ refresh token   7 dias
 
 O backend diferencia access e refresh tokens.
 
-Access token não pode ser usado como refresh.
-
-Refresh token não pode atuar como access.
-
-Usuário inativo é rejeitado.
-
-Empresa inativa é rejeitada em login e refresh.
-
-Commit:
-
-```text
-fb7cf0a fix: harden authentication for inactive tenants
-```
+- access token não pode ser usado como refresh;
+- refresh token não pode atuar como access;
+- usuário inativo é rejeitado;
+- empresa inativa é rejeitada em login e refresh.
 
 ## 8.2 Rotação / revogação
 
 Ao usar um refresh válido, o backend emite novo par de tokens.
 
-Entretanto o refresh anterior não é revogado server-side.
+O refresh anterior não é revogado server-side.
 
 Não existem atualmente:
 
@@ -455,24 +401,13 @@ Recomendado endurecer antes de cenários comerciais mais sensíveis.
 
 Os tokens permanecem no `localStorage`.
 
-Isso aumenta impacto potencial de XSS.
+Isso aumenta o impacto potencial de XSS.
 
-Migração para cookie `HttpOnly` deve ser avaliada juntamente com:
-
-- CORS com credentials;
-- estratégia CSRF;
-- sessão/revogação server-side;
-- logout server-side.
-
-Não fazer migração parcial.
+Uma eventual migração para cookie `HttpOnly` deve ser tratada em conjunto com CORS com credentials, estratégia CSRF, sessão/revogação server-side e logout server-side real.
 
 ## 8.4 Fila de refresh
 
-Foi corrigido um problema no interceptor Axios.
-
-Antes, se várias requisições aguardassem um refresh e a renovação falhasse, Promises poderiam permanecer pendentes.
-
-Agora:
+O interceptor Axios trata concorrência de refresh:
 
 ```text
 refresh OK
@@ -484,34 +419,18 @@ refresh falha
 → redireciona para login
 ```
 
-Commit:
-
-```text
-1f51ec3 fix: handle refresh token queue failures
-```
-
-Validação após a alteração:
-
-```text
-npx tsc --noEmit  → OK
-npm run build      → OK
-npm audit          → 0 vulnerabilities
-```
-
 ---
 
 # 9. Segurança frontend e headers
 
-Dependências frontend foram auditadas.
-
-Estado final:
+Auditorias atuais:
 
 ```text
 npm audit              → 0 vulnerabilities
 npm audit --omit=dev   → 0 vulnerabilities
 ```
 
-Headers configurados na Vercel e confirmados em produção:
+Headers configurados e validados em produção:
 
 ```text
 X-Content-Type-Options: nosniff
@@ -524,11 +443,9 @@ Content-Security-Policy
 
 ## CSP e Zod
 
-A CSP iniciou em modo `Report-Only`.
+A CSP está ativa em modo bloqueante e sem `unsafe-eval`.
 
-Durante a validação foi detectada execução de `Function(...)`. A origem principal identificada foi o mecanismo JIT do Zod 4.4.3.
-
-Foi criado um wrapper central:
+O Zod utiliza wrapper central com modo `jitless`:
 
 ```ts
 import { z } from 'zod'
@@ -540,127 +457,36 @@ z.config({
 export { z }
 ```
 
-Os imports diretos usados nas páginas de ordens passaram a utilizar esse wrapper.
+Fluxos validados em produção incluem login, dashboard, clientes, criação de cliente, ordens, criação de OS, detalhe da OS, inclusão de item e alteração de status.
 
-Validações após a alteração:
+O `'unsafe-inline'` permanece temporariamente em `style-src`.
 
-```text
-TypeScript             OK
-Build Vite             OK
-npm audit              0 vulnerabilities
-unsafe-eval runtime    não reproduzido
-```
+## Secrets
 
-A política foi então promovida para `Content-Security-Policy` bloqueante, sem adicionar `unsafe-eval`.
+Foi executada busca por credenciais versionadas.
 
-Fluxos validados em produção:
+Resultado confirmado:
 
-- login;
-- dashboard;
-- clientes;
-- criação de cliente;
-- ordens;
-- criação de OS;
-- detalhe da OS;
-- inclusão de item;
-- alteração de status.
-
-Resultado:
-
-```text
-CSP bloqueante ativa
-Aplicação funcional
-Console sem violações CSP
-```
-
-## Decisão final sobre JWT no frontend
-
-Os tokens permanecem no `localStorage`.
-
-A ausência de revogação server-side, token family, `jti` persistido e logout server-side real permanece como limitação conhecida do MVP/portfólio.
-
-Não foi criada uma rota `/logout` sem capacidade efetiva de revogação.
-
-Antes de cenários comerciais mais sensíveis, a arquitetura de sessão deverá ser reavaliada de forma conjunta, incluindo cookie `HttpOnly`, CSRF, refresh server-side e revogação.
-
-## Secrets e credenciais
-
-Foi executada busca no Git por `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, host Neon e URLs públicas.
-
-Resultado:
-
-- nenhuma credencial real do Neon foi encontrada versionada;
-- nenhum host real `*.neon.tech` foi encontrado no Git;
-- URLs públicas do Render aparecem apenas onde esperado;
-- `.env.test` utiliza apenas valores locais/de teste;
-- a `SECRET_KEY` de teste foi deixada explicitamente fictícia e não reutilizável em produção.
-
-## Resultado da ETAPA 7
-
-```text
-JWT básico                      OK
-Empresa inativa                 OK
-Fila de refresh                 OK
-Dependências                    OK
-Headers                         OK
-CSP bloqueante                  OK
-Zod jitless                     OK
-Credenciais produção no Git     NÃO ENCONTRADAS
-localStorage                    LIMITAÇÃO DOCUMENTADA
-Revogação server-side           ROADMAP
-Logout server-side real         ROADMAP
-```
-
-**ETAPA 7 concluída para o escopo atual.**
+- nenhuma credencial real do Neon encontrada no Git;
+- nenhum host real `*.neon.tech` encontrado no Git;
+- `.env.test` contém somente valores locais/de teste;
+- `SECRET_KEY` de teste é explicitamente fictícia.
 
 ---
 
-# 10. Migração PostgreSQL Render → Neon — 20/08/2026
+# 10. PostgreSQL de produção — Neon
 
-## Contexto
+O PostgreSQL gratuito originalmente utilizado no Render expirou e foi substituído por Neon em 20/08/2026.
 
-O PostgreSQL Free usado originalmente no Render expirou e foi suspenso.
+Como os registros existentes eram apenas dados de teste, não houve necessidade de preservar os dados.
 
-Os registros existentes eram exclusivamente dados de teste.
-
-Decisão:
+Migrations aplicadas:
 
 ```text
-não preservar os dados antigos;
-manter PostgreSQL;
-trocar apenas o provedor de persistência.
-```
-
-## Novo provedor
-
-```text
-Neon Free
-PostgreSQL
-```
-
-## Processo executado
-
-1. Projeto criado no Neon.
-2. Direct connection validada via `psql`.
-3. Banco inicialmente confirmado vazio.
-4. Variáveis temporárias configuradas no PowerShell.
-5. Alembic conectado ao Neon.
-6. Todas as migrations aplicadas.
-7. Schema validado via `psql`.
-8. Variáveis de produção atualizadas no Render.
-9. Backend redeployado.
-10. Health check validado.
-11. CORS validado.
-12. Operações reais executadas pelo frontend.
-13. Dados confirmados diretamente no SQL Editor do Neon.
-
-## Migrations aplicadas
-
-```text
--> 06d5ab8065eb  initial_schema
--> 533015c239d4  expand_customer_address_fields
--> 885f034e93c2  order_number varchar to integer
--> 3e89efe30105  order_number unique per company
+06d5ab8065eb  initial_schema
+533015c239d4  expand_customer_address_fields
+885f034e93c2  order_number varchar to integer
+3e89efe30105  order_number unique per company
 ```
 
 Revisão atual:
@@ -669,7 +495,7 @@ Revisão atual:
 3e89efe30105
 ```
 
-## Tabelas confirmadas
+Tabelas confirmadas:
 
 ```text
 alembic_version
@@ -681,55 +507,6 @@ subscriptions
 users
 ```
 
-## Validação de infraestrutura
-
-Health:
-
-```text
-HTTP/1.1 200 OK
-{"status":"ok"}
-```
-
-Preflight CORS:
-
-```text
-HTTP/1.1 200 OK
-access-control-allow-origin: https://serviceflow-liard.vercel.app
-access-control-allow-credentials: true
-```
-
-## Validação funcional pós-migração
-
-Foi realizado pela aplicação publicada:
-
-- registro/login;
-- criação de empresa;
-- criação de owner;
-- criação de subscription;
-- criação de cliente;
-- criação de ordem;
-- associação de técnico;
-- inclusão de dois itens;
-- transição da OS até `COMPLETED`;
-- visualização no dashboard.
-
-Consulta direta no Neon:
-
-```text
-companies        1
-users            1
-subscriptions    1
-customers        1
-service_orders   1
-service_items    2
-```
-
-Resultado:
-
-```text
-MIGRAÇÃO CONCLUÍDA E VALIDADA
-```
-
 Arquitetura final:
 
 ```text
@@ -739,117 +516,153 @@ Database     Neon PostgreSQL
 Migrations   Alembic
 ```
 
-Nenhuma alteração da arquitetura de domínio ou da camada ORM foi necessária.
-
 ---
 
-# 11. Documentação
+# 11. Dashboard e agregações
 
-README e PROJECT foram sincronizados durante o hardening.
+## ETAPA 8 — concluída
 
-Commit anterior:
+O problema original era o cálculo client-side sobre uma listagem limitada a 50 ordens.
+
+A solução atual utiliza:
 
 ```text
-5afaee7 docs: sync serviceflow technical documentation
+GET /api/v1/dashboard/summary
 ```
 
-Após a migração para Neon e o fechamento da ETAPA 7, os documentos registram:
+O backend agrega:
 
-- Neon como PostgreSQL de produção;
-- 86 testes;
-- CSP bloqueante;
-- Zod em modo `jitless`;
-- decisão sobre `localStorage`, refresh e logout;
-- migração validada;
-- limitações e roadmap atuais.
+- contagem por status;
+- ordens por mês nos últimos seis meses;
+- oito ordens recentes.
 
----
-
-# 12. Dashboard
-
-Status:
+Escopo de autorização:
 
 ```text
-IMPLEMENTADO COM LIMITAÇÃO
+OWNER / ADMIN → dados de todo o tenant
+TECHNICIAN    → apenas OS atribuídas ao próprio técnico
 ```
 
-O frontend busca uma listagem limitada e calcula parte dos KPIs client-side.
+O backend preenche meses sem ordens com zero.
 
-Risco:
+Foram adicionados testes para:
+
+- volume superior a 50 ordens;
+- dashboard vazio;
+- isolamento entre tenants;
+- escopo TECHNICIAN.
+
+A limitação de 50 ordens não existe mais no cálculo do dashboard.
+
+---
+
+# 12. Contrato da API de OS — pendências
+
+Pontos ainda classificados como dívida técnica/roadmap:
+
+- revisar campos de schema sem persistência equivalente;
+- revisar `technician_notes`;
+- revisar criação de OS com `items`;
+- avaliar campos adicionais de equipamento/endereço contra o model real.
+
+Não apresentar esses pontos como funcionalidades concluídas sem validação.
+
+---
+
+# 13. Limpeza técnica
+
+## ETAPA 9 — concluída para o escopo atual
+
+### Backend
+
+- configuração Pydantic migrada para `SettingsConfigDict`;
+- `pytest-asyncio` atualizado para compatibilidade com Python 3.14;
+- `pytest` alinhado em `9.1.1`;
+- suíte reduzida de milhares de warnings para apenas 2 warnings externos do SlowAPI;
+- `pip check` sem dependências quebradas.
+
+### Frontend
+
+- arquivo residual vazio removido;
+- feedbacks de erro corrigidos;
+- busca por `console.log`, `console.debug`, `breakpoint` e `pdb` sem resíduos;
+- encoding UTF-8 verificado sem mojibake real;
+- code splitting por rota implementado com `React.lazy` e `Suspense`.
+
+Build após code splitting:
 
 ```text
-mais de 50 OS
-→ KPIs podem representar apenas parte da base
+Bundle principal antes:  ~1.060,76 kB
+Bundle principal depois: ~351,61 kB
+gzip principal:          ~109,32 kB
+DashboardPage:           ~357,73 kB
 ```
 
-Recomendação para ETAPA 8:
+Redução aproximada do JavaScript inicial: 67%.
 
-- endpoints agregados no backend;
-- filtros de período/status no servidor;
-- KPIs calculados no banco;
-- frontend apenas apresenta os agregados.
-
-Não corrigido ainda.
+Nenhum chunk acima de 500 kB no build validado.
 
 ---
 
-# 13. Contrato da API de OS — pendências
+# 14. CI
 
-Pontos identificados para revisão futura:
+## ETAPA 10 — concluída
 
-- alguns campos de schema ainda não possuem persistência equivalente;
-- `technician_notes` precisa ser revisado;
-- criação de OS com `items` precisa ser confirmada/alinhada;
-- campos adicionais de equipamento/endereço precisam ser avaliados contra o model real.
-
-Não apresentar esses campos como funcionalidades concluídas até validação.
-
----
-
-# 14. Dívida técnica / limpeza
-
-## Backend
-
-- 5123 warnings na última suíte completa;
-- depreciações Pydantic;
-- warnings/depreciações pytest-asyncio em Python 3.14;
-- warnings SlowAPI;
-- dependências a revisar;
-- possíveis duplicações em requirements.
-
-## Frontend
-
-- bundle principal acima de 500 kB;
-- code splitting ainda não implementado;
-- arquivos/componentes residuais precisam de revisão;
-- `UsersPage` possui fluxo de erro que precisa ser revisado;
-- acessibilidade ainda requer auditoria;
-- estilos inline ainda existem em quantidade relevante.
-
----
-
-# 15. CI
-
-Status:
+Workflow:
 
 ```text
-NÃO IMPLEMENTADO
+.github/workflows/ci.yml
 ```
 
-Planejado:
+Disparos:
 
-- GitHub Actions;
-- pytest backend;
-- TypeScript check;
-- build frontend;
-- npm audit conforme estratégia definida;
-- eventualmente migration check.
+- push para `main`;
+- pull request para `main`;
+- execução manual.
+
+### Backend CI
+
+```text
+Ubuntu
+Python 3.14
+PostgreSQL 16 descartável
+requirements.lock
+pip check
+Alembic upgrade head
+pytest -q
+```
+
+Resultado validado:
+
+```text
+Backend ✅
+90 testes aprovados
+```
+
+### Frontend CI
+
+```text
+Ubuntu
+Node 24
+npm ci
+TypeScript check
+Vite build
+npm audit
+npm audit --omit=dev
+```
+
+Resultado validado:
+
+```text
+Frontend ✅
+0 vulnerabilidades
+```
+
+O CI não utiliza Neon, Render ou credenciais de produção.
 
 ---
 
-# 16. Ordem de trabalho
-
-Ordem de prioridade original:
+# 15. Ordem de trabalho
 
 ```text
 ETAPA 1   Auditoria                           CONCLUÍDA
@@ -859,104 +672,133 @@ ETAPA 4   Escopo TECHNICIAN                   CONCLUÍDA
 ETAPA 5   Estabilização da suíte              CONCLUÍDA
 ETAPA 6   README / PROJECT                    CONCLUÍDA
 ETAPA 7   Segurança e hardening               CONCLUÍDA
-ETAPA 8   Dashboard / agregações              PRÓXIMA
-ETAPA 9   Limpeza técnica                     PENDENTE
-ETAPA 10  CI                                  PENDENTE
-ETAPA 11  Revisão final para portfólio        PENDENTE
+ETAPA 8   Dashboard / agregações              CONCLUÍDA
+ETAPA 9   Limpeza técnica                     CONCLUÍDA
+ETAPA 10  CI                                  CONCLUÍDA
+ETAPA 11  Revisão final para portfólio        EM ANDAMENTO
 ```
 
-Evento adicional concluído durante ETAPA 7:
+Evento adicional:
 
 ```text
-Migração Render PostgreSQL → Neon             CONCLUÍDA
+Migração Render PostgreSQL → Neon            CONCLUÍDA
 ```
 
 ---
 
-# 17. Próxima ação recomendada
+# 16. Definition of Done para o case
 
-Iniciar a ETAPA 8:
+Estado atual:
 
-```text
-auditar dashboard atual
-↓
-identificar KPIs e fontes
-↓
-criar agregações no backend
-↓
-adicionar testes
-↓
-ajustar frontend
-↓
-validar comportamento com volume superior ao limite atual de 50 OS
-```
-
-Não iniciar a ETAPA 9 antes de estabilizar o dashboard.
-
----
-
-# 18. Definition of Done para o case
-
-O projeto será considerado pronto para fechamento como case principal quando:
-
-- aplicação funcionar em produção;
-- migrations estiverem consistentes;
-- model e banco estiverem alinhados;
-- isolamento multi-tenant estiver testado;
-- autorização estiver formalizada;
-- README refletir o código real;
-- documentação não apresentar roadmap como funcionalidade;
-- dependências principais estiverem revisadas;
-- build frontend estiver verde;
-- suíte backend estiver verde;
-- segurança e limitações estiverem documentadas;
-- dashboard deixar de depender da limitação de 50 OS;
-- limpeza técnica principal estiver concluída;
-- CI estiver configurado ou sua ausência estiver explicitamente justificada;
-- `SERVICEFLOW_PORTFOLIO_STATE.md` for gerado com somente informações comprovadas.
+- [x] aplicação funciona em produção;
+- [x] migrations consistentes;
+- [x] model e banco alinhados para `order_number`;
+- [x] isolamento multi-tenant testado;
+- [x] autorização de OS formalizada;
+- [x] dependências principais revisadas;
+- [x] build frontend verde;
+- [x] suíte backend verde;
+- [x] segurança e limitações documentadas;
+- [x] dashboard sem limitação de 50 OS;
+- [x] limpeza técnica principal concluída;
+- [x] CI configurado e validado;
+- [ ] README e PROJECT atualizados com o estado final;
+- [ ] `SERVICEFLOW_PORTFOLIO_STATE.md` gerado com somente informações comprovadas.
 
 ---
 
-# 19. Validação atual resumida
+# 17. Validação atual resumida
 
 ```text
 BACKEND
 pytest -q
-86 passed
+90 passed, 2 warnings
+
+python -m pip check
+No broken requirements found.
 
 FRONTEND
-npx tsc --noEmit       OK
-npm run build           OK
-npm audit               0 vulnerabilities
-npm audit --omit=dev    0 vulnerabilities
+npx --no-install tsc --noEmit   OK
+npm run build                   OK
+npm audit                       0 vulnerabilities
+npm audit --omit=dev            0 vulnerabilities
+
+BUILD
+index principal                 ~351,61 kB
+gzip principal                  ~109,32 kB
+DashboardPage                   ~357,73 kB
+chunks > 500 kB                 nenhum
+
+CI
+Backend                         VERDE
+Frontend                        VERDE
 
 PRODUÇÃO
-Frontend Vercel         OK
-Backend Render          OK
-GET /health             200 OK
-CORS                    OK
-Neon PostgreSQL         OK
-Alembic                 3e89efe30105
-CSP bloqueante          OK
-Console CSP             sem violações nos fluxos validados
+Frontend Vercel                 OK
+Backend Render                  OK
+GET /health                     200 OK
+CORS                            OK
+Neon PostgreSQL                 OK
+Alembic                         3e89efe30105
+CSP bloqueante                  OK
 ```
 
 ---
 
-# 20. Commits recentes relevantes
+# 18. Roadmap / limitações conhecidas
+
+## Segurança
+
+- revogação server-side de refresh token;
+- blacklist / `jti` / token family;
+- logout server-side real;
+- avaliar cookie `HttpOnly` + CSRF;
+- reduzir `style-src 'unsafe-inline'`.
+
+## Banco
+
+- endurecer geração concorrente de `order_number`;
+- revisar índices multi-tenant quando houver carga real.
+
+## RBAC
+
+- formalizar política do `VIEWER`;
+- adicionar testes após definição.
+
+## API de ordens
+
+- revisar campos de schema sem persistência equivalente;
+- revisar `technician_notes`;
+- revisar criação com `items`;
+- revisar campos adicionais de equipamento/endereço.
+
+## Qualidade
+
+- acompanhar compatibilidade futura do SlowAPI com Python 3.14;
+- auditoria específica de acessibilidade;
+- otimizações adicionais de bundle apenas se métricas reais justificarem.
+
+---
+
+# 19. Próxima ação
+
+Finalizar a ETAPA 11:
 
 ```text
-4e0dda4  fix: enforce service order tenant and technician scope
-fb7cf0a  fix: harden authentication for inactive tenants
-36f6d23  test: add plan limits and stable test environment
-5afaee7  docs: sync serviceflow technical documentation
-549be3a  chore: harden frontend dependencies and security headers
-1f51ec3  fix: handle refresh token queue failures
+revisar README público
+↓
+sincronizar PROJECT
+↓
+validar Git
+↓
+gerar SERVICEFLOW_PORTFOLIO_STATE.md
+↓
+revisão final do case
 ```
 
 ---
 
-# 21. Segurança de credenciais
+# 20. Segurança de credenciais
 
 Nunca inserir em documentação ou Git:
 
@@ -965,20 +807,8 @@ Nunca inserir em documentação ou Git:
 - `POSTGRES_PASSWORD` de produção;
 - `SECRET_KEY` de produção;
 - tokens JWT;
-- qualquer credencial de Render/Vercel/Neon.
+- credenciais de Render/Vercel/Neon.
 
 Exemplos de variáveis devem utilizar placeholders.
 
----
-
-# 22. Nota sobre `backend/.env.test`
-
-`backend/.env.test` pertence somente ao ambiente automatizado de testes e deve conter exclusivamente credenciais locais/de teste.
-
-Ele não deve ser alterado para apontar para:
-
-- Neon de produção;
-- Render;
-- qualquer banco contendo dados reais.
-
-Mudanças acidentais nesse arquivo durante configuração de produção devem ser revisadas antes de qualquer commit.
+`backend/.env.test` pertence exclusivamente ao ambiente automatizado/local de testes e não deve apontar para produção.
